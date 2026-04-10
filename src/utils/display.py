@@ -385,6 +385,24 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
         apa_str    = _format_apa(paper)
         mla_str    = _format_mla(paper)
         bibtex_str = _format_bibtex_entry(paper)
+        
+        col1, col22 = st.columns(2)
+        with col1:
+            st.subheader("APA 7th Edition")
+            st.text_area(
+                "APA",
+                value=apa_text,
+                height=150,
+                key="apa_citation"
+            )
+        with col2:
+            st.subheader("MLA 9th Edition")
+            st.text_area(
+                "MLA",
+                value=mla_text,
+                height=150,
+                key="mla_citation"
+            )
 
         st.markdown("**APA 7th Edition**")
         st.text_area("APA", value=apa_str, height=90,
