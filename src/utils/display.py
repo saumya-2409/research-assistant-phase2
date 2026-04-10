@@ -394,7 +394,7 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
         with col2:
             st.markdown("**MLA 9th Edition**")
             st.text_area("MLA", value=mla_str, height=90,
-                     key=f"mla_{cite_key}", label_visibility="collapsed"))
+                     key=f"mla_{cite_key}", label_visibility="collapsed")
 
         st.markdown("**BibTeX**")
         st.text_area("BibTeX", value=bibtex_str, height=130,
