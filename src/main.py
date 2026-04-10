@@ -18,7 +18,7 @@ from embedding_utils import load_embedding_model, compute_relevance_embedding_sc
 from summarizer import FullPaperSummarizer
 from fetchers import IntelligentMultiSourceFetcher
 from utils.utility import rank_papers
-from display import (render_welcome_screen, render_suggested_paper,
+from utils.display import (render_welcome_screen, render_suggested_paper,
                      render_paper_ui, render_paper_inline, render_header,
                      render_metrics, render_saved_paper_card)
 from clustering import PaperClusterer
