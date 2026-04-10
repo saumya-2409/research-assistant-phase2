@@ -22,7 +22,27 @@ def _source_tag_class(source: str) -> str:
     if "pubmed"   in s: return "tag-coral"
     return "tag-gray"
 
+import streamlit.components.v1 as components
 
+def _copy_button(text: str, key: str):
+    """Renders a small JS-powered copy-to-clipboard button."""
+    escaped = text.replace('`', '\\`').replace('\\', '\\\\').replace('\n', '\\n')
+    components.html(f"""
+    <button onclick="
+        navigator.clipboard.writeText(`{escaped}`)
+            .then(() => {{
+                this.innerText = '✅ Copied!';
+                setTimeout(() => this.innerText = '📋 Copy', 1800);
+            }})
+            .catch(() => this.innerText = '❌ Failed');
+    " style="
+        background:#5B4EE8;color:white;border:none;
+        padding:7px 16px;border-radius:8px;cursor:pointer;
+        font-size:13px;font-weight:500;font-family:Inter,sans-serif;
+        transition:background 0.15s;
+    ">📋 Copy</button>
+    """, height=42)
+    
 def _label_badge(label: str) -> str:
     badges = {
         'Foundational': 'background:#EEEDFE;color:#3C3489',
