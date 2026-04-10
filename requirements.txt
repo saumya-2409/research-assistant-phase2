@@ -46,3 +46,6 @@ tenacity>=8.0.0  # For exponential backoff retries (optional; custom impl below 
 groq
 keybert
 openpyxl
+
+
+torchvision
