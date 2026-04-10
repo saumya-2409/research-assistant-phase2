@@ -308,6 +308,13 @@ render_header(
 
 # ── Sidebar ───────────────────────────────────────────────────────────
 with st.sidebar:
+    # User menu (shown if auth is active and user is logged in)
+      if AUTH_AVAILABLE:
+          try:
+              render_user_menu()
+          except Exception:
+              pass
+
     st.markdown("### 🔍 Research Parameters")
     query = st.text_input(
         "Research Topic",
@@ -338,13 +345,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # User menu (shown if auth is active and user is logged in)
-    if AUTH_AVAILABLE:
-        try:
-            render_user_menu()
-        except Exception:
-            pass
-
+    
     st.caption("© 2026 AI Research Assistant")
 
     # ── PIPELINE (inside sidebar status) ─────────────────────────────
