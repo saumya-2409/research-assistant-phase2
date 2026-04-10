@@ -24,7 +24,7 @@ from utils.display import (render_welcome_screen, render_suggested_paper,
 from clustering import PaperClusterer
 from config import RETRIEVAL
 from database import init_database
-from export import export_to_excel, generate_bibtex
+from utils.export import export_to_excel, generate_bibtex
 
 # ── Auth ──────────────────────────────────────────────────────────────
 try:
