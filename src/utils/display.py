@@ -367,19 +367,15 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
         st.markdown("""
         <div style="background:#F0EEFF;border:1px solid #D4CFFF;border-radius:8px;
                     padding:10px 14px;margin-bottom:10px;font-size:12px;color:#3D35A8;">
-            ℹ️ Select all (Ctrl+A) and copy into your literature review.
+            ℹ️ Use the Copy button or select all (Ctrl+A) to paste into your literature review.
             Always verify facts before submitting.
         </div>
         """, unsafe_allow_html=True)
 
+        lit_key = f"lit_{idx}_{hash(paper.get('title',''))%99991}"
+
         if lit_para:
-            st.text_area(
-                "Literature review paragraph",
-                value=lit_para,
-                height=180,
-                key=f"lit_{idx}_{hash(paper.get('title',''))%99991}",
-                label_visibility="collapsed"
-            )
+            para_text = lit_para  
         else:
             authors_list = paper.get("authors", []) or []
             au   = str(authors_list[0]).split()[-1] if authors_list else "Authors"
@@ -387,14 +383,22 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
             yr   = paper.get("year", "n.d.")
             body = problem or (abstract[:250] + "..." if abstract else "conducted a study in this area.")
             find = f" Key findings include: {findings[0]}" if findings else ""
-            basic = f"{au}{et} ({yr}) {body}{find}"
+            para_text = f"{au}{et} ({yr}) {body}{find}"
+
+        col_txt, col_btn = st.columns([5, 1])
+        with col_txt:
             st.text_area(
                 "Literature review paragraph",
-                value=basic,
-                height=140,
-                key=f"lit_basic_{idx}_{hash(paper.get('title',''))%99991}",
+                value=para_text,
+                height=180,
+                key=lit_key,
                 label_visibility="collapsed"
             )
+        with col_btn:
+            st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
+            _copy_button(para_text, key=f"copy_{lit_key}")
+
+        if not lit_para:
             st.caption("Auto-generated from abstract. Configure an LLM for richer paragraphs.")
 
     # ── Tab 3: Cite ───────────────────────────────────────────────────
