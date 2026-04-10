@@ -666,7 +666,10 @@ if st.session_state.papers_data:
             )
         with fc3:
             st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-            st.button("↺ Reset Filters", on_click=reset_filters, use_container_width=True)
+            if st.button("↺ Reset Filters", use_container_width=True):
+                st.session_state.filter_label   = 'All'
+                st.session_state.filter_cluster = 'All'
+                st.rerun()
 
         # Apply filters
         filtered = papers_data
