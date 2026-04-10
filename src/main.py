@@ -9,6 +9,7 @@ import os
 import logging
 import time
 import plotly.express as px
+import plotly.graph_objects as go
 import concurrent.futures
 from typing import List, Dict
 from dotenv import load_dotenv
@@ -17,50 +18,59 @@ from embedding_utils import load_embedding_model, compute_relevance_embedding_sc
 from summarizer import FullPaperSummarizer
 from fetchers import IntelligentMultiSourceFetcher
 from utils.utility import rank_papers
-from utils.display import render_welcome_screen, render_suggested_paper, render_paper_ui, render_paper_inline, render_header, render_metrics
+from display import (render_welcome_screen, render_suggested_paper,
+                     render_paper_ui, render_paper_inline, render_header,
+                     render_metrics, render_saved_paper_card)
 from clustering import PaperClusterer
 from config import RETRIEVAL
+from database import init_database
+from export import export_to_excel, generate_bibtex
 
+# ── Auth ──────────────────────────────────────────────────────────────
+try:
+    from auth import render_auth_gate, render_user_menu
+    AUTH_AVAILABLE = True
+except Exception:
+    AUTH_AVAILABLE = False
 
 load_dotenv()
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 logging.getLogger().setLevel(logging.ERROR)
 
+# ── Page config ───────────────────────────────────────────────────────
 st.set_page_config(
     page_title="AI Research Assistant",
-    page_icon=" § ",
+    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# ── DB + Auth gate ────────────────────────────────────────────────────
+try:
+    init_database()
+except Exception:
+    pass
 
-if 'summarizer' not in st.session_state:
-    st.session_state.summarizer = FullPaperSummarizer()
-    print("[App Debug] Summarizer singleton created")
+if AUTH_AVAILABLE:
+    render_auth_gate()
 
-# BEAUTIFUL DESIGN CSS (PRESERVED)
-
-# ── DESIGN SYSTEM CSS ────────────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
-/* ── Base ── */
 *, *::before, *::after { box-sizing: border-box; }
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 .stApp { background: #F5F4FF !important; }
 
-/* ── Hide Streamlit chrome ── */
 #MainMenu, footer { visibility: hidden; }
 header { visibility: visible !important; }
 .stDeployButton { display: none; }
 
-/* ── Sidebar ── */
 [data-testid="stSidebar"] {
     background: #FFFFFF !important;
     border-right: 1px solid #E8E6FF !important;
@@ -77,27 +87,16 @@ header { visibility: visible !important; }
     margin-top: 20px !important;
 }
 
-/* ── Sidebar slider ── */
-[data-testid="stSidebar"] [data-testid="stSlider"] > div > div > div {
-    background: #5B4EE8 !important;
-}
-[data-testid="stSidebar"] [data-testid="stSlider"] [data-testid="stThumbValue"] {
-    color: #5B4EE8 !important;
-    font-weight: 600 !important;
-}
-
-/* ── Main content padding ── */
 .main .block-container {
     padding: 2rem 2.5rem 4rem !important;
-    max-width: 1100px !important;
+    max-width: 1200px !important;
 }
 
-/* ── App header ── */
 .app-header {
-    background: #5B4EE8;
+    background: linear-gradient(135deg, #5B4EE8 0%, #7B6FF0 100%);
     border-radius: 16px;
     padding: 28px 32px;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -110,13 +109,13 @@ header { visibility: visible !important; }
     padding: 0 !important;
 }
 .app-header p {
-    color: rgba(255,255,255,0.75) !important;
+    color: rgba(255,255,255,0.80) !important;
     font-size: 14px !important;
     margin: 4px 0 0 0 !important;
 }
 .header-badge {
-    background: rgba(255,255,255,0.18);
-    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.20);
+    border: 1px solid rgba(255,255,255,0.35);
     border-radius: 20px;
     padding: 6px 14px;
     color: white;
@@ -124,7 +123,7 @@ header { visibility: visible !important; }
     font-weight: 500;
 }
 
-/* ── Buttons ── */
+/* Buttons */
 .stButton > button {
     border-radius: 10px !important;
     font-weight: 500 !important;
@@ -147,10 +146,9 @@ header { visibility: visible !important; }
 }
 .stButton > button[kind="primary"]:hover {
     background: #4A3DD4 !important;
-    border-color: #4A3DD4 !important;
 }
 
-/* ── Text input ── */
+/* Text input */
 .stTextInput > div > div > input {
     border-radius: 10px !important;
     border: 1px solid #E0DEFF !important;
@@ -158,7 +156,6 @@ header { visibility: visible !important; }
     font-size: 14px !important;
     background: white !important;
     color: #1A1744 !important;
-    transition: border-color 0.15s !important;
 }
 .stTextInput > div > div > input:focus {
     border-color: #5B4EE8 !important;
@@ -166,7 +163,7 @@ header { visibility: visible !important; }
 }
 .stTextInput > div > div > input::placeholder { color: #B0ACDF !important; }
 
-/* ── Tabs ── */
+/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
     background: white !important;
     border-radius: 12px !important;
@@ -188,60 +185,7 @@ header { visibility: visible !important; }
     color: white !important;
 }
 
-/* ── Metric cards ── */
-.metric-card {
-    background: white;
-    border: 1px solid #E8E6FF;
-    border-radius: 14px;
-    padding: 20px;
-    text-align: center;
-}
-.metric-number {
-    font-size: 32px;
-    font-weight: 600;
-    color: #5B4EE8;
-    line-height: 1;
-    margin-bottom: 6px;
-}
-.metric-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #9B97C4;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-/* ── Paper cards ── */
-.paper-card {
-    background: white;
-    border: 1px solid #E8E6FF;
-    border-radius: 14px;
-    padding: 20px 22px;
-    margin-bottom: 12px;
-    transition: box-shadow 0.15s, transform 0.15s;
-}
-.paper-card:hover {
-    box-shadow: 0 4px 20px rgba(91,78,232,0.08);
-    transform: translateY(-1px);
-}
-.paper-card-accent {
-    border-left: 3px solid #5B4EE8 !important;
-    border-radius: 0 14px 14px 0 !important;
-}
-.paper-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1A1744;
-    margin-bottom: 6px;
-    line-height: 1.4;
-}
-.paper-meta {
-    font-size: 12px;
-    color: #9B97C4;
-    margin-bottom: 10px;
-}
-
-/* ── Source / status tags ── */
+/* Tags */
 .tag {
     display: inline-block;
     padding: 3px 10px;
@@ -259,127 +203,52 @@ header { visibility: visible !important; }
 .tag-green   { background: #EAF3DE; color: #27500A; }
 .tag-gray    { background: #F1EFE8; color: #444441; }
 
-/* ── Cluster cards ── */
+/* Paper cards */
+.paper-card {
+    background: white;
+    border: 1px solid #E8E6FF;
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 12px;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+.paper-card:hover {
+    box-shadow: 0 4px 20px rgba(91,78,232,0.08);
+    transform: translateY(-1px);
+}
+
+/* Cluster cards */
 .cluster-card {
     background: white;
     border: 1px solid #E8E6FF;
     border-radius: 14px;
     padding: 18px 20px;
     margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-.cluster-card:hover {
-    border-color: #5B4EE8;
-    box-shadow: 0 4px 16px rgba(91,78,232,0.08);
-}
-.cluster-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1A1744;
-    margin-bottom: 4px;
-}
-.cluster-meta {
-    font-size: 12px;
-    color: #9B97C4;
 }
 
-/* ── Step progress ── */
-.step-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
-}
+/* Step dots */
 .step-dot {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    font-weight: 600;
-    flex-shrink: 0;
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; flex-shrink: 0;
 }
 .step-done   { background: #E1F5EE; color: #0F6E56; }
 .step-active { background: #5B4EE8; color: white; }
 .step-wait   { background: #F1EFE8; color: #B4B2A9; }
 
-/* ── Info / warning boxes ── */
-.info-box {
-    background: #F0EEFF;
-    border: 1px solid #D4CFFF;
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 13px;
-    color: #3D35A8;
-    margin-bottom: 12px;
-}
+/* Info boxes */
 .warning-box {
-    background: #FAEEDA;
-    border: 1px solid #F5C875;
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 13px;
-    color: #633806;
-    margin-bottom: 12px;
+    background: #FAEEDA; border: 1px solid #F5C875;
+    border-radius: 12px; padding: 14px 16px;
+    font-size: 13px; color: #633806; margin-bottom: 12px;
 }
 .success-box {
-    background: #E1F5EE;
-    border: 1px solid #9FE1CB;
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 13px;
-    color: #0F6E56;
-    margin-bottom: 12px;
+    background: #E1F5EE; border: 1px solid #9FE1CB;
+    border-radius: 12px; padding: 14px 16px;
+    font-size: 13px; color: #0F6E56; margin-bottom: 12px;
 }
 
-/* ── Gap analysis cards ── */
-.gap-card {
-    background: white;
-    border: 1px solid #E8E6FF;
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 12px;
-}
-.gap-card-method { border-left: 3px solid #D85A30; border-radius: 0 14px 14px 0; }
-.gap-card-eval   { border-left: 3px solid #1D9E75; border-radius: 0 14px 14px 0; }
-.gap-card-app    { border-left: 3px solid #5B4EE8; border-radius: 0 14px 14px 0; }
-.gap-card-theory { border-left: 3px solid #BA7517; border-radius: 0 14px 14px 0; }
-.gap-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #1A1744;
-    margin-bottom: 8px;
-}
-.gap-text {
-    font-size: 13px;
-    color: #5C5888;
-    line-height: 1.6;
-}
-
-/* ── Suggested / restricted papers ── */
-.restricted-card {
-    background: white;
-    border: 1px solid #F5C4B3;
-    border-left: 3px solid #D85A30;
-    border-radius: 0 14px 14px 0;
-    padding: 16px 18px;
-    margin-bottom: 10px;
-}
-.restricted-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #1A1744;
-    margin-bottom: 6px;
-}
-.restricted-meta { font-size: 12px; color: #9B97C4; margin-bottom: 8px; }
-
-/* ── Expanders ── */
+/* Expanders */
 [data-testid="stExpander"] {
     background: white !important;
     border: 1px solid #E8E6FF !important;
@@ -391,61 +260,19 @@ header { visibility: visible !important; }
     padding: 14px 18px !important;
     font-weight: 500 !important;
     font-size: 14px !important;
+    color: #1A1744 !important;
 }
 [data-testid="stExpander"] summary:hover { background: #F8F7FF !important; }
 
-/* ── st.info / st.success / st.warning overrides ── */
-[data-testid="stAlert"] {
-    border-radius: 12px !important;
-    border: 1px solid !important;
-}
-
-/* ── Progress bar ── */
+/* Progress bar */
 [data-testid="stProgressBar"] > div > div {
-    background: #5B4EE8 !important;
-    border-radius: 4px !important;
+    background: #5B4EE8 !important; border-radius: 4px !important;
 }
 [data-testid="stProgressBar"] > div {
-    background: #EAE8FF !important;
-    border-radius: 4px !important;
+    background: #EAE8FF !important; border-radius: 4px !important;
 }
 
-/* ── Divider ── */
 hr { border-color: #E8E6FF !important; }
-
-/* ── Link buttons ── */
-.stLinkButton > a {
-    border-radius: 8px !important;
-    border: 1px solid #E0DEFF !important;
-    color: #5B4EE8 !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    padding: 7px 14px !important;
-    background: white !important;
-}
-.stLinkButton > a:hover {
-    background: #F0EEFF !important;
-    border-color: #5B4EE8 !important;
-}
-
-/* ── st.status ── */
-[data-testid="stStatusWidget"] {
-    border-radius: 14px !important;
-    border: 1px solid #E8E6FF !important;
-    background: white !important;
-}
-
-/* ── Caption ── */
-.stCaption { color: #9B97C4 !important; font-size: 12px !important; }
-
-/* ── Selectbox ── */
-[data-testid="stSelectbox"] > div > div {
-    border-radius: 10px !important;
-    border: 1px solid #E0DEFF !important;
-    background: white !important;
-}
-
-/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #F5F4FF; }
 ::-webkit-scrollbar-thumb { background: #C8C4F0; border-radius: 3px; }
@@ -453,321 +280,185 @@ hr { border-color: #E8E6FF !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# ── Session state ─────────────────────────────────────────────────────
+_defaults = {
+    'papers_data':          [],
+    'full_text_papers':     [],
+    'suggested_papers':     [],
+    'clusters':             {},
+    'processing':           False,
+    'cached_query':         '',
+    'current_page':         1,
+    'saved_papers_session': [],
+    'last_query':           '',
+}
+for k, v in _defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-# Initialize session state
-if 'papers_data' not in st.session_state:
-    st.session_state.papers_data = []
-if 'full_text_papers' not in st.session_state:
-    st.session_state.full_text_papers = []
-if 'suggested_papers' not in st.session_state:
-    st.session_state.suggested_papers = []
-if 'clusters' not in st.session_state:
-    st.session_state.clusters = {}
-if 'processing' not in st.session_state:
-    st.session_state.processing = False
-if 'cached_query' not in st.session_state:
-    st.session_state.cached_query = ''
-if 'papers_to_save' not in st.session_state:
-    st.session_state.papers_to_save = []
+if 'summarizer' not in st.session_state:
+    st.session_state.summarizer = FullPaperSummarizer()
 
-# ==================== GAP ANALYSIS ====================
+# ── Header ────────────────────────────────────────────────────────────
+render_header(
+    len(st.session_state.get("papers_data", [])),
+    len(set(p.get("source", "") for p in st.session_state.get("papers_data", [])))
+)
 
-class ResearchGapAnalyzer:
-    def analyze_gaps(self, papers: List[Dict]) -> Dict[str, List[str]]:
-        gaps = {
-            'methodological_gaps': [],
-            'evaluation_gaps': [], 
-            'application_gaps': [],
-            'theoretical_gaps': []
-        }
-        
-        # Use extracted content for better gap analysis
-        all_content = []
-        for paper in papers:
-            content = paper.get('extracted_content', '') or paper.get('abstract', '')
-            all_content.append(content)
-        
-        combined_content = ' '.join(all_content).lower()
-        
-        if 'dataset' in combined_content or 'limited' in combined_content:
-            gaps['methodological_gaps'].extend([
-                'Limited dataset diversity across different domains and applications',
-                'Lack of standardized evaluation protocols for cross-method comparison',
-                'Insufficient attention to computational efficiency and scalability issues'
-            ])
-        
-        if 'experiment' in combined_content or 'evaluation' in combined_content:
-            gaps['evaluation_gaps'].extend([
-                'Need for more comprehensive real-world testing scenarios',
-                'Lack of longitudinal studies assessing long-term performance',
-                'Limited evaluation on edge cases and adversarial conditions'
-            ])
-        
-        if 'application' in combined_content or 'real-world' in combined_content:
-            gaps['application_gaps'].extend([
-                'Gap between laboratory results and industrial deployment',
-                'Limited integration with existing systems and workflows',
-                'Insufficient consideration of regulatory and ethical constraints'
-            ])
-        
-        if 'theoretical' in combined_content or 'analysis' in combined_content:
-            gaps['theoretical_gaps'].extend([
-                'Lack of theoretical foundations for empirical observations',
-                'Limited understanding of failure modes and boundary conditions',
-                'Insufficient mathematical analysis of convergence properties'
-            ])
-        
-        return gaps
-
-# ==================== MAIN APPLICATION ====================
-
-render_header(len(st.session_state.get("papers_data",[])), len(set(p.get("source","") for p in st.session_state.get("papers_data",[]))))
-
-# Enhanced Sidebar
+# ── Sidebar ───────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🔍 Research Parameters")    
-    query = st.text_input("Research Topic", placeholder="e.g., Generative AI in Healthcare", help="Enter the specific topic you want to analyze")
+    st.markdown("### 🔍 Research Parameters")
+    query = st.text_input(
+        "Research Topic",
+        placeholder="e.g., Generative AI in Healthcare",
+        help="Enter the specific topic you want to analyse"
+    )
 
     st.markdown("### ⚙️ Configuration")
-    papers_per_source = st.slider("Papers to Analyse",10,100,30,10)
+    papers_per_source = st.slider("Papers to Analyse", 10, 100, 30, 10)
 
-
-    # --- Buttons Layout (Side-by-Side) ---
     col_start, col_clear = st.columns(2)
     with col_start:
-        # Start Analysis Button
         start_btn = st.button(
-            "🚀 Start", type="primary", 
+            "🚀 Start", type="primary",
             disabled=st.session_state.processing or not query,
             use_container_width=True,
         )
-
     with col_clear:
-        # Clear Results Button
         clear_btn = st.button(
-            "🗑️ Clear", 
-            type="secondary",
-            use_container_width=True,
+            "🗑️ Clear", type="secondary", use_container_width=True,
         )
-    
-    # Handle Clear Logic
+
     if clear_btn:
-        for key in ['papers_data','full_text_papers','suggested_papers','clusters','current_page']:
-            st.session_state[key] = [] if key != 'clusters' else {}
-            if key == 'current_page': st.session_state[key] = 1 # Reset pagination
+        for key in ['papers_data', 'full_text_papers', 'suggested_papers',
+                    'clusters', 'current_page', 'last_query']:
+            st.session_state[key] = [] if key not in ('clusters', 'current_page', 'last_query') else ({} if key == 'clusters' else (1 if key == 'current_page' else ''))
         st.rerun()
-    
-    # Footer
+
     st.markdown("---")
-    st.caption("© 2026 Intelligent Research Assistant")
-    
-    # ── MAIN AREA — processing and results ──────────────────────────────
-    # Handle Start Logic
+
+    # User menu (shown if auth is active and user is logged in)
+    if AUTH_AVAILABLE:
+        try:
+            render_user_menu()
+        except Exception:
+            pass
+
+    st.caption("© 2026 AI Research Assistant")
+
+    # ── PIPELINE (inside sidebar status) ─────────────────────────────
     if start_btn and query.strip():
         st.session_state.processing = True
-        
-        # Create the status container
+        st.session_state.last_query = query.strip()
+
         with st.status("🚀 Initiating Research Sequence...", expanded=True) as status:
             try:
-                # ── STEP 1: FETCH ALL AVAILABLE PAPERS ──────────────────────
-                # Always fetch the maximum the API will return.
-                # We rank and slice AFTER filtering, not before.
-                st.write("1️⃣ **Scouting Sources:** Fetching latest research...")
+                # STEP 1: Fetch
+                st.write("1️⃣ **Fetching papers from all sources...**")
                 t0 = time.time()
                 fetcher = IntelligentMultiSourceFetcher()
-
-                # Pass papers_per_source=100 to fetch max from API.
-                # user_requested is used later for slicing AFTER filtering.
                 raw_papers, total_fetched = fetcher.fetch_papers(
-                    query,
-                    sources=None,
-                    papers_per_source=50,
-                    user_requested=None       # do NOT slice yet
+                    query, sources=None, papers_per_source=50, user_requested=None
                 )
-                st.write(f"   All sources: {total_fetched} unique papers in {time.time()-t0:.1f}s")
+                st.write(f"   Found {total_fetched} unique papers in {time.time()-t0:.1f}s")
 
                 if not raw_papers:
-                    status.update(
-                        label="❌ No papers found. Try different keywords.",
-                        state="error"
-                    )
+                    status.update(label="❌ No papers found. Try different keywords.", state="error")
                     st.session_state.processing = False
                     st.stop()
 
-                # ── STEP 2: REMOVE INACCESSIBLE PAPERS ──────────────────────
-                # Access check already ran inside fetch_papers (IntelligentPaperAccessor).
-                # Here we hard-remove papers marked inaccessible so they never
-                # reach the relevance filter, ranker, or summariser.
-                # They go directly to suggested_papers for the Restricted tab.
-                st.write("2️⃣ **Access Check:** Separating accessible from restricted papers...")
-
-                pre_filter_accessible = []
-                pre_filter_restricted = []
-
+                # STEP 2: Access check
+                st.write("2️⃣ **Checking paper accessibility...**")
+                accessible, restricted = [], []
                 for p in raw_papers:
-                    # fetcher sets pdf_available=True if it found a PDF or extracted content
-                    # papers with no URL AND no abstract are genuinely useless
                     has_content = (
-                        p.get('pdf_available') or
-                        p.get('extracted_content') or
-                        p.get('is_open_access') or
-                        len(p.get('abstract', '')) > 50
+                        p.get('pdf_available') or p.get('extracted_content') or
+                        p.get('is_open_access') or len(p.get('abstract', '')) > 50
                     )
-                    if has_content:
-                        pre_filter_accessible.append(p)
-                    else:
-                        pre_filter_restricted.append(p)
+                    (accessible if has_content else restricted).append(p)
+                st.write(f"   {len(accessible)} accessible · {len(restricted)} restricted")
 
-                st.write(
-                    f"   {len(pre_filter_accessible)} accessible  |  "
-                    f"{len(pre_filter_restricted)} restricted (moved to Restricted tab)"
-                )
-
-                if not pre_filter_accessible:
-                    status.update(
-                        label="⚠️ All papers are behind paywalls. Try ArXiv-focused queries.",
-                        state="error"
-                    )
-                    st.session_state.suggested_papers = pre_filter_restricted
-                    st.session_state.papers_data      = []
-                    st.session_state.full_text_papers  = []
-                    st.session_state.clusters          = {}
-                    st.session_state.processing        = False
+                if not accessible:
+                    status.update(label="⚠️ All papers are behind paywalls.", state="error")
+                    st.session_state.suggested_papers = restricted
+                    st.session_state.papers_data = []
+                    st.session_state.processing = False
                     st.stop()
 
-                # ── STEP 3: RELEVANCE FILTER ─────────────────────────────────
-                # Run semantic relevance scoring on ALL accessible papers.
-                # This runs BEFORE slicing so the user's N papers are the
-                # most relevant N, not just the first N that happened to arrive.
-                st.write("3️⃣ **Relevance Filter:** Scoring all papers against query...")
-
-                # Encode query ONCE before the loop
-                _model = load_embedding_model()
-                query_emb = _model.encode(query, convert_to_tensor=True) if _model else None
-
-                scored_papers = []
-                source_stats  = {}   # track per-source survival rates
-
-                for p in pre_filter_accessible:
-                    score = compute_relevance_embedding_score(query, p, query_embedding=query_emb)
+                # STEP 3: Relevance filter
+                st.write("3️⃣ **Scoring relevance...**")
+                _model  = load_embedding_model()
+                qemb    = _model.encode(query, convert_to_tensor=True) if _model else None
+                scored, source_stats = [], {}
+                for p in accessible:
+                    score = compute_relevance_embedding_score(query, p, query_embedding=qemb)
                     p['relevance_score'] = round(score, 3)
                     src = p.get('source', 'unknown')
                     source_stats.setdefault(src, {'total': 0, 'passed': 0})
                     source_stats[src]['total'] += 1
                     if score >= RETRIEVAL["relevance_threshold"]:
-                        scored_papers.append(p)
+                        scored.append(p)
                         source_stats[src]['passed'] += 1
 
-                # Show the per-source breakdown so user can see which sources contributed
-                st.write("**Relevance filter results by source:**")
                 for src, stats in sorted(source_stats.items()):
-                    pct = (stats['passed'] / stats['total'] * 100) if stats['total'] else 0
-                    st.write(
-                        f"  {src}: {stats['passed']}/{stats['total']} passed "
-                        f"({pct:.0f}% relevant)"
-                    )
+                    pct = stats['passed'] / stats['total'] * 100 if stats['total'] else 0
+                    st.write(f"   {src}: {stats['passed']}/{stats['total']} relevant ({pct:.0f}%)")
 
-                if not scored_papers:
-                    status.update(
-                        label="⚠️ No relevant papers found. Try broader keywords.",
-                        state="error"
-                    )
-                    st.warning("All papers scored below the relevance threshold (0.25).")
+                if not scored:
+                    status.update(label="⚠️ No relevant papers. Try broader keywords.", state="error")
                     st.session_state.processing = False
                     st.stop()
 
-                # ── STEP 4: RANK AND SLICE TO USER'S REQUESTED NUMBER ────────
-                # Now rank all relevant papers by citation count + recency.
-                # Then slice to exactly what the user asked for.
-                # This is the correct place to apply the user's N — after
-                # filtering, not before, so the user gets the best N papers.
+                # STEP 4: Rank + slice
+                st.write("4️⃣ **Ranking papers...**")
+                ranked      = rank_papers(scored)
+                final       = ranked[:papers_per_source]
+                composition = Counter(p.get('source', 'unknown') for p in final)
+                st.write("   **Source breakdown:** " +
+                         " | ".join(f"{s}: {n}" for s, n in composition.most_common()))
 
-                ranked_papers   = rank_papers(scored_papers)
-                total_relevant  = len(ranked_papers)
-                final_papers    = ranked_papers[:papers_per_source]
-
-                # Show source composition of final selection
-                source_composition = Counter(p.get('source', 'unknown') for p in final_papers)
-                st.write(
-                    f"**Final {len(final_papers)} papers by source:** " +
-                    " | ".join(f"{src}: {n}" for src, n in source_composition.most_common())
-                )
-
-                # ── STEP 5: GENERATE SUMMARIES ───────────────────────────────
-                # Run AI summarisation on the final set only.
-                # This is the expensive step — we deliberately kept it last
-                # so we only summarise papers the user will actually see.
-                st.write(f"5️⃣ **Deep Reading:** Generating AI summaries for {len(final_papers)} papers...")
-
+                # STEP 5: Summarise
+                st.write(f"5️⃣ **Generating AI summaries for {len(final)} papers...**")
                 summarizer_instance = st.session_state.summarizer
-                total_to_summarise  = len(final_papers)
+                progress = st.progress(0)
+                status_txt = st.empty()
+                papers_data, full_text_papers, suggested_papers = [], [], list(restricted)
+                done = 0
 
-                summary_progress = st.progress(0)
-                summary_status   = st.empty()
-                summary_caption  = st.empty()
-
-                def process_single_paper(p):
+                def _process(p):
                     try:
-                        summary = summarizer_instance.summarize_paper(
-                            p, use_full_text=True, query=query
-                        )
-                        if not isinstance(summary, dict):
-                            summary = {}
+                        s = summarizer_instance.summarize_paper(p, use_full_text=True, query=query)
+                        if not isinstance(s, dict):
+                            s = {}
                     except Exception:
-                        summary = {}
-
-                    p['ai_summary']              = summary
-                    # Default to accessible — paper already passed access check.
-                    # Only mark inaccessible if summariser explicitly says so AND
-                    # there is no abstract to fall back on.
-                    explicit_status = summary.get('accessibility')
-                    if explicit_status == 'inaccessible' and not p.get('abstract'):
-                        p['accessibility'] = 'inaccessible'
-                    else:
-                        p['accessibility'] = 'accessible'
-
-                    p['abstract_summary_status'] = summary.get(
-                        'abstract_summary_status', 'extractive_fallback'
+                        s = {}
+                    p['ai_summary'] = s
+                    explicit = s.get('accessibility')
+                    p['accessibility'] = (
+                        'inaccessible'
+                        if explicit == 'inaccessible' and not p.get('abstract')
+                        else 'accessible'
                     )
+                    p['abstract_summary_status'] = s.get('abstract_summary_status', 'extractive_fallback')
                     return p
 
-                papers_data      = []
-                full_text_papers = []
-                suggested_papers = list(pre_filter_restricted)
-                done_count       = 0
-
-                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                    future_to_paper = {
-                        executor.submit(process_single_paper, p): p
-                        for p in final_papers
-                    }
-                    for future in concurrent.futures.as_completed(future_to_paper):
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+                    futures = {ex.submit(_process, p): p for p in final}
+                    for future in concurrent.futures.as_completed(futures):
                         try:
                             result = future.result()
                         except Exception:
-                            # Individual paper failed — use the original paper with no summary
-                            result = future_to_paper[future]
-                            result['accessibility']          = 'accessible'
+                            result = futures[future]
+                            result['accessibility'] = 'accessible'
                             result['abstract_summary_status'] = 'extractive_fallback'
-                            result['ai_summary']             = {}
-
-                        done_count += 1
-                        pct    = done_count / total_to_summarise
-                        title  = result.get('title', '')[:55]
-                        badge  = (
-                            '📄' if result.get('abstract_summary_status') == 'generated_from_fulltext'
-                            else '⚡' if result.get('abstract_summary_status') == 'generated_from_abstract'
-                            else '📝'
-                        )
-
-                        summary_progress.progress(pct)
-                        summary_status.markdown(
-                            f"**{badge} {done_count}/{total_to_summarise}** — {title}..."
-                        )
-                        summary_caption.caption(
-                            f"{int(pct * 100)}% complete"
-                        )
-
+                            result['ai_summary'] = {}
+                        done += 1
+                        pct   = done / len(final)
+                        badge = ('📄' if result.get('abstract_summary_status') == 'generated_from_fulltext'
+                                 else '⚡' if result.get('abstract_summary_status') == 'generated_from_abstract'
+                                 else '📝')
+                        progress.progress(pct)
+                        status_txt.markdown(f"**{badge} {done}/{len(final)}** — {result.get('title','')[:55]}...")
                         if result.get('accessibility') == 'accessible':
                             papers_data.append(result)
                             if (result.get('extracted_content') or
@@ -776,259 +467,387 @@ with st.sidebar:
                         else:
                             suggested_papers.append(result)
 
-                summary_progress.empty()
-                summary_status.empty()
-                summary_caption.empty()
+                progress.empty()
+                status_txt.empty()
 
-                # ── STEP 6: SAVE STATE ───────────────────────────────────────
+                # STEP 6: Save state
                 st.session_state.papers_data      = papers_data
                 st.session_state.full_text_papers  = full_text_papers
                 st.session_state.suggested_papers  = suggested_papers
                 st.session_state.processing        = False
+                st.session_state.current_page      = 1
 
-                status.update(
-                    label=f"✅ Done — {len(papers_data)} papers analysed",
-                    state="complete",
-                    expanded=False
-                )
+                status.update(label=f"✅ Done — {len(papers_data)} papers analysed",
+                              state="complete", expanded=False)
 
-                # ── STEP 7: CLUSTERING ───────────────────────────────────────
+                # STEP 7: Cluster
                 if papers_data:
-                    st.write("6️⃣ **Smart Clustering:** Grouping papers by research theme...")
+                    st.write("6️⃣ **Clustering by research theme...**")
                     try:
                         clusterer = PaperClusterer()
                         st.session_state.clusters = clusterer.cluster_papers(papers_data)
                     except Exception as ce:
                         st.warning(f"Clustering skipped: {ce}")
                         st.session_state.clusters = {}
-                else:
-                    st.session_state.clusters = {}
 
                 st.balloons()
 
             except Exception as e:
-                status.update(
-                    label="❌ An error occurred during analysis.",
-                    state="error"
-                )
-                st.error(f"Error: {str(e)}")
+                status.update(label="❌ An error occurred.", state="error")
+                st.error(f"Error: {e}")
                 st.session_state.processing = False
 
-    
 
-# ==================== MAIN CONTENT ====================
+# ── MAIN CONTENT ─────────────────────────────────────────────────────
 if st.session_state.papers_data:
-    # Enhanced metrics
-    render_metrics(st.session_state.papers_data, st.session_state.full_text_papers, st.session_state.clusters)
-    
-    # Clean tabs
+
+    papers_data   = st.session_state.papers_data
+    full_text     = st.session_state.full_text_papers
+    clusters      = st.session_state.clusters
+    restricted    = st.session_state.suggested_papers
+
+    render_metrics(papers_data, full_text, clusters)
+
     tab1, tab2, tab3, tab4 = st.tabs([
-        " Dashboard", 
-        " Papers & Summaries", 
-        " Research Gaps",
-        " Restricted Reading"
+        "📊 Dashboard",
+        "📄 Papers & Summaries",
+        "📚 Saved Papers",
+        "📤 Export & Restricted",
     ])
-    
+
+    # ── TAB 1: DASHBOARD ─────────────────────────────────────────────
     with tab1:
         st.markdown("### Research Dashboard")
-        st.markdown("*Intelligent analysis with enhanced content extraction*")
-        
-        if st.session_state.clusters:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                cluster_names = []
-                cluster_counts = []
-                for cluster_id, cluster_info in st.session_state.clusters.items():
-                    cluster_names.append(cluster_info['name'])
-                    cluster_counts.append(cluster_info.get('paper_count', len(cluster_info.get('papers', []))))
 
-                
-                colors = ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#667eea', '#764ba2']
-                
-                fig = px.pie(
-                    values=cluster_counts,
-                    names=cluster_names,
-                    title="Research Areas Distribution",
-                    color_discrete_sequence=colors
-                )
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(
-                    font_family="Inter",
-                    title_font_size=16,
-                    font_size=12,
-                    showlegend=True
-                )
-                st.plotly_chart(fig, width='stretch')
-            
-            with col2:
-                citation_data = []
-                area_names = []
-                for cluster_info in st.session_state.clusters.values():
-                    citation_data.append(cluster_info.get('avg_citations', 0))
-                    area_names.append(cluster_info['name'])
-                
-                fig = px.bar(
-                    x=citation_data,
-                    y=area_names,
+        if clusters:
+            cluster_names  = []
+            cluster_counts = []
+            cluster_cites  = []
+            cluster_years  = []
+
+            for cid, info in clusters.items():
+                name = info.get('name', f'Cluster {int(cid)+1}')
+                # Truncate long names for charts
+                short = name[:30] + '…' if len(name) > 30 else name
+                cluster_names.append(short)
+                cluster_counts.append(info.get('paper_count', len(info.get('papers', []))))
+                cluster_cites.append(info.get('avg_citations', 0))
+                cluster_years.append(info.get('avg_year', 0))
+
+            COLORS = ['#5B4EE8', '#1D9E75', '#D85A30', '#BA7517',
+                      '#0C447C', '#712B13', '#27500A', '#3C3489']
+
+            # Chart row
+            col1, col2 = st.columns(2, gap="large")
+
+            with col1:
+                # Paper count bar — horizontal, easy to read
+                fig = go.Figure(go.Bar(
+                    x=cluster_counts,
+                    y=cluster_names,
                     orientation='h',
-                    title="Average Citations by Research Area",
-                    color=citation_data,
-                    color_continuous_scale=["#f8fafc", "#667eea", "#764ba2"]
-                )
+                    marker_color=COLORS[:len(cluster_names)],
+                    text=cluster_counts,
+                    textposition='outside',
+                ))
                 fig.update_layout(
-                    font_family="Inter",
-                    title_font_size=16,
-                    font_size=12,
-                    xaxis_title="Average Citations",
-                    yaxis_title="Research Area"
+                    title="Papers per Research Theme",
+                    xaxis_title="Number of Papers",
+                    yaxis_title="",
+                    font=dict(family="Inter", size=12),
+                    height=max(250, len(cluster_names) * 52),
+                    margin=dict(l=10, r=40, t=40, b=10),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(gridcolor='#E8E6FF'),
                 )
-                st.plotly_chart(fig, width='stretch')
-            
-            # Enhanced cluster cards
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                # Avg citations scatter — year on x, cites on y, size = paper count
+                fig2 = go.Figure(go.Scatter(
+                    x=cluster_years if any(cluster_years) else cluster_names,
+                    y=cluster_cites,
+                    mode='markers+text',
+                    marker=dict(
+                        size=[max(18, c * 3) for c in cluster_counts],
+                        color=COLORS[:len(cluster_names)],
+                        opacity=0.85,
+                    ),
+                    text=cluster_names,
+                    textposition='top center',
+                    textfont=dict(size=10),
+                ))
+                fig2.update_layout(
+                    title="Avg Citations by Theme (bubble = paper count)",
+                    xaxis_title="Avg Publication Year",
+                    yaxis_title="Avg Citations",
+                    font=dict(family="Inter", size=12),
+                    height=max(250, len(cluster_names) * 52),
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(gridcolor='#E8E6FF'),
+                    yaxis=dict(gridcolor='#E8E6FF'),
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # Cluster cards
             st.markdown("### Research Themes")
-            
-            for cluster_id, cluster_info in st.session_state.clusters.items():
-                paper_count = len(cluster_info['papers'])# Safe count from filtered papers list
-                extracted_in_cluster = len([p for p in cluster_info['papers'] if p.get('extracted_content')])
-                
+            for i, (cid, info) in enumerate(clusters.items()):
+                cp          = info.get('papers', [])
+                n_extracted = len([p for p in cp if p.get('extracted_content')])
+                years       = [int(p['year']) for p in cp if str(p.get('year','')).isdigit()]
+                yr_range    = f"{min(years)}–{max(years)}" if years else "–"
+                color       = COLORS[i % len(COLORS)]
+
                 st.markdown(f"""
-                <div class="cluster-card">
-                    <div class="cluster-name">{cluster_info['name']}</div>
-                    <p style="color: #64748b; margin-bottom: 1rem;">{cluster_info['description']}</p>
-                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                        <span style="background: #f1f5f9; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; color: #475569;">
-                            {paper_count} papers
+                <div class="cluster-card" style="border-left:4px solid {color};">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                        <div style="width:10px;height:10px;border-radius:50%;
+                                    background:{color};flex-shrink:0;"></div>
+                        <div style="font-size:15px;font-weight:600;color:#1A1744;">
+                            {info.get('name', f'Cluster {int(cid)+1}')}
+                        </div>
+                    </div>
+                    <p style="color:#64748b;font-size:13px;margin-bottom:12px;">
+                        {info.get('description', '')[:120]}
+                    </p>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                            border-radius:6px;font-size:12px;font-weight:500;">
+                            {len(cp)} papers
                         </span>
-                        <span style="background: #f1f5f9; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; color: #475569;">
-                            {extracted_in_cluster} content extracted
+                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                            border-radius:6px;font-size:12px;font-weight:500;">
+                            {n_extracted} full-text
                         </span>
-                        <span style="background: #f1f5f9; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; color: #475569;">
-                            {cluster_info.get('avg_citations', 0)} avg citations
+                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                            border-radius:6px;font-size:12px;font-weight:500;">
+                            ⌀ {info.get('avg_citations', 0)} citations
                         </span>
-                        <span style="background: #f1f5f9; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; color: #475569;">
-                            {cluster_info.get('avg_year', 2024)}
+                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                            border-radius:6px;font-size:12px;font-weight:500;">
+                            {yr_range}
                         </span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("Complete analysis to see research themes and dashboard metrics.")
-   
+            st.info("Run a search to see the research landscape dashboard.")
+
+    # ── TAB 2: PAPERS & SUMMARIES ─────────────────────────────────────
     with tab2:
         st.markdown("### Papers & Summaries")
-        # Process any pending saves from paper cards
-        if st.session_state.get('papers_to_save'):
-            for paper_to_save in st.session_state.papers_to_save:
-                st.success(f"✅ Saved: {paper_to_save.get('title','')[:50]}...")
-            st.session_state.papers_to_save = []
-        papers_data = st.session_state.get("papers_data", [])
-        
-        if not papers_data:
-            st.info("No accessible papers available. Try another query or enable more sources.")
+
+        # ── Filter controls ───────────────────────────────────────────
+        all_labels   = sorted(set(p.get('paper_label', '') for p in papers_data if p.get('paper_label')))
+        all_clusters = {}
+        for cid, info in clusters.items():
+            for p in info.get('papers', []):
+                all_clusters[p.get('title', '')] = info.get('name', f'Cluster {int(cid)+1}')
+
+        cluster_options = ['All'] + sorted(set(all_clusters.values()))
+        label_options   = ['All'] + all_labels
+
+        fc1, fc2, fc3 = st.columns([2, 2, 1])
+        with fc1:
+            sel_label = st.selectbox(
+                "Filter by type",
+                label_options,
+                key="filter_label",
+                help="Foundational (highly cited, older), Current (recent, cited), Emerging (newest)"
+            )
+        with fc2:
+            sel_cluster = st.selectbox(
+                "Filter by research theme",
+                cluster_options,
+                key="filter_cluster"
+            )
+        with fc3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("↺ Reset Filters", use_container_width=True):
+                st.session_state.filter_label   = 'All'
+                st.session_state.filter_cluster = 'All'
+                st.rerun()
+
+        # Apply filters
+        filtered = papers_data
+        if sel_label != 'All':
+            filtered = [p for p in filtered if p.get('paper_label') == sel_label]
+        if sel_cluster != 'All':
+            filtered = [p for p in filtered
+                        if all_clusters.get(p.get('title', '')) == sel_cluster]
+
+        if sel_label != 'All' or sel_cluster != 'All':
+            st.caption(f"Showing {len(filtered)} of {len(papers_data)} papers after filters")
+
+        if not filtered:
+            st.info("No papers match the selected filters. Try adjusting or resetting them.")
         else:
-            # --- PAGINATION CONFIG ---
+            # Pagination
             ITEMS_PER_PAGE = 10
-            
-            if 'current_page' not in st.session_state:
-                st.session_state.current_page = 1
-                
-            total_count = len(papers_data)
-            total_pages = max(1, (total_count + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
-            
+            total_pages = max(1, (len(filtered) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
             if st.session_state.current_page > total_pages:
                 st.session_state.current_page = 1
 
-            # --- INFO TEXT (TOP) ---
-            # Just text, no buttons here
-            st.markdown(f"""
-            <div style="color: #64748b; margin-bottom: 15px; font-size: 0.95rem;">
-                Showing Page <strong>{st.session_state.current_page}</strong> of <strong>{total_pages}</strong> 
-                <span style="color: #94a3b8;">({total_count} total papers)</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='color:#64748b;margin-bottom:15px;font-size:0.95rem;'>"
+                f"Page <strong>{st.session_state.current_page}</strong> of "
+                f"<strong>{total_pages}</strong> "
+                f"<span style='color:#94a3b8;'>({len(filtered)} papers)</span></div>",
+                unsafe_allow_html=True
+            )
 
-            # --- DISPLAY CURRENT PAGE ---
-            start_idx = (st.session_state.current_page - 1) * ITEMS_PER_PAGE
-            end_idx = start_idx + ITEMS_PER_PAGE
-            
-            current_batch = papers_data[start_idx:end_idx]
-            
-            for p_idx, paper in enumerate(current_batch):
-                global_idx = start_idx + p_idx
-                render_paper_ui(paper, idx=global_idx)
-            
+            start = (st.session_state.current_page - 1) * ITEMS_PER_PAGE
+            for i, paper in enumerate(filtered[start:start + ITEMS_PER_PAGE]):
+                render_paper_ui(paper, idx=start + i)
+
             st.markdown("---")
-
-            # --- PAGINATION CONTROLS (BOTTOM ONLY) ---
-            c1, c2, c3 = st.columns([1, 3, 1])
-            
-            with c1:
-                if st.button("← Previous", key="btn_prev", disabled=(st.session_state.current_page == 1), use_container_width=True):
+            p1, p2, p3 = st.columns([1, 3, 1])
+            with p1:
+                if st.button("← Prev", disabled=(st.session_state.current_page == 1),
+                             use_container_width=True, key="prev_btn"):
                     st.session_state.current_page -= 1
                     st.rerun()
-            
-            with c2:
-                # Centered page indicator for easy reading at bottom
-                st.markdown(f"""
-                <div style="text-align: center; padding-top: 8px; color: #64748b; font-weight: 500;">
-                    Page {st.session_state.current_page}
-                </div>
-                """, unsafe_allow_html=True)
-
-            with c3:
-                if st.button("Next →", key="btn_next", disabled=(st.session_state.current_page == total_pages), use_container_width=True):
+            with p2:
+                st.markdown(
+                    f"<div style='text-align:center;padding-top:8px;color:#64748b;font-weight:500;'>"
+                    f"Page {st.session_state.current_page} / {total_pages}</div>",
+                    unsafe_allow_html=True
+                )
+            with p3:
+                if st.button("Next →", disabled=(st.session_state.current_page == total_pages),
+                             use_container_width=True, key="next_btn"):
                     st.session_state.current_page += 1
                     st.rerun()
 
+    # ── TAB 3: SAVED PAPERS ───────────────────────────────────────────
     with tab3:
-        st.markdown("### Research Gaps Analysis")
-        st.markdown("*Enhanced gap analysis using extracted content*")
-        
-        if st.session_state.papers_data:
-            gap_analyzer = ResearchGapAnalyzer()
-            gaps = gap_analyzer.analyze_gaps(st.session_state.papers_data)
-            
-            for gap_type, gap_list in gaps.items():
-                if gap_list:
-                    gap_title = gap_type.replace('_', ' ').title()
-                    
-                    st.markdown(f"""
-                    <div class="gap-card">
-                        <h4 style="margin-bottom: 0.8rem; color: #7c3aed;">{gap_title}</h4>
-                        <ul style="color: #374151; margin: 0; padding-left: 1.5rem;">
-                    """, unsafe_allow_html=True)
-                    
-                    for gap in gap_list:
-                        st.markdown(f"<li style='margin-bottom: 0.5rem;'>{gap}</li>", unsafe_allow_html=True)
-                    
-                    st.markdown("</ul></div>", unsafe_allow_html=True)
-        else:
-            st.info("Complete paper analysis to identify research gaps and opportunities.")
-    
-    with tab4:
-        st.markdown("### Restricted Reading")
+        st.markdown("### 📚 Saved Papers")
+        saved = st.session_state.get('saved_papers_session', [])
 
-        
+        if not saved:
+            st.markdown("""
+            <div style="text-align:center;padding:40px 20px;color:#9B97C4;">
+                <div style="font-size:32px;margin-bottom:12px;">🔖</div>
+                <div style="font-size:16px;font-weight:500;margin-bottom:6px;">No saved papers yet</div>
+                <div style="font-size:13px;">
+                    Click the <strong>🔖 Save</strong> button inside any paper card to add it here.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"**{len(saved)} saved paper{'s' if len(saved) != 1 else ''}**")
+
+            # Bulk export saved papers
+            if len(saved) > 0:
+                saved_bib = generate_bibtex(saved)
+                st.download_button(
+                    "📥 Download Saved Papers as BibTeX",
+                    data=saved_bib,
+                    file_name="saved_papers.bib",
+                    mime="text/plain",
+                    use_container_width=False,
+                )
+
+            st.markdown("---")
+            # Render each saved paper
+            for i, paper in enumerate(saved):
+                render_saved_paper_card(paper, idx=i)
+
+    # ── TAB 4: EXPORT & RESTRICTED ────────────────────────────────────
+    with tab4:
+        st.markdown("### 📤 Export")
+
+        ecol1, ecol2 = st.columns(2, gap="large")
+
+        with ecol1:
+            st.markdown("""
+            <div style="background:white;border:1px solid #E8E6FF;border-radius:14px;
+                        padding:20px;margin-bottom:12px;">
+                <div style="font-size:16px;font-weight:600;color:#1A1744;margin-bottom:6px;">
+                    📊 Excel Spreadsheet
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-bottom:14px;">
+                    All papers organised by cluster, with metadata, abstracts,
+                    relevance scores, and a cluster summary sheet.
+                    Colour-coded by theme. Ready for review or sharing.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            try:
+                excel_bytes = export_to_excel(
+                    papers_data, clusters,
+                    st.session_state.get('last_query', 'research')
+                )
+                st.download_button(
+                    "📥 Download Excel (.xlsx)",
+                    data=excel_bytes,
+                    file_name="research_papers.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    type="primary",
+                )
+            except Exception as e:
+                st.error(f"Could not generate Excel: {e}")
+
+        with ecol2:
+            st.markdown("""
+            <div style="background:white;border:1px solid #E8E6FF;border-radius:14px;
+                        padding:20px;margin-bottom:12px;">
+                <div style="font-size:16px;font-weight:600;color:#1A1744;margin-bottom:6px;">
+                    📝 BibTeX Reference File
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-bottom:14px;">
+                    All papers as a <code>.bib</code> file — import directly into
+                    Overleaf, Zotero, Mendeley, or any LaTeX project.
+                    One citation key per paper, auto-deduplicated.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            try:
+                bibtex_str = generate_bibtex(papers_data)
+                st.download_button(
+                    "📥 Download BibTeX (.bib)",
+                    data=bibtex_str,
+                    file_name="research_papers.bib",
+                    mime="text/plain",
+                    use_container_width=True,
+                    type="primary",
+                )
+            except Exception as e:
+                st.error(f"Could not generate BibTeX: {e}")
+
+        st.markdown("---")
+        st.markdown("### 🔒 Restricted Papers")
         st.markdown("""
         <div class="warning-box">
-            <strong>Restricted Access:</strong> Access to these papers requires a subscription or paid access.
+            These papers were found but require a subscription or institutional access.
+            Citations are still available — you can look them up via your library.
         </div>
         """, unsafe_allow_html=True)
-        
-        if not st.session_state.suggested_papers:
-            st.success("Excellent! All papers are accessible. Check 'Papers & Summaries' for complete analysis with extracted content.")
+
+        if not restricted:
+            st.markdown("""
+            <div class="success-box">
+                ✅ All found papers were accessible — nothing is restricted.
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.markdown(f"**{len(st.session_state.suggested_papers)} papers requiring paid/institutional access**")
-            
-            for i, paper in enumerate(st.session_state.suggested_papers, 1):
+            st.markdown(f"**{len(restricted)} restricted papers**")
+            for paper in restricted:
                 render_suggested_paper(paper)
 
 else:
     render_welcome_screen()
 
-
-# Clean footer
+# ── Footer ─────────────────────────────────────────────────────────────
 if not st.session_state.processing:
     st.markdown("---")
-    st.markdown("<div style='text-align: center; color: #94a3b8; font-size: 0.9rem;'> Intelligent research assistant with content extraction</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:center;color:#94a3b8;font-size:0.85rem;padding-bottom:1rem;'>"
+        "🔬 AI Research Assistant · 6 sources · AI summaries · Citation export"
+        "</div>",
+        unsafe_allow_html=True
+    )
