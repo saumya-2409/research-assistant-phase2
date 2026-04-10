@@ -263,7 +263,7 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
     pdf_url     = paper.get("pdf_url", "")
 
     # ── 4 summary tabs ────────────────────────────────────────────────
-    t1, t2, t3, t4 = st.tabs(["📋 Summary", "📖 Lit Review ¶", "📊 Metrics", "📎 Cite"])
+    t1, t2, t3 = st.tabs(["📋 Summary", "📖 Lit Review ¶", "📎 Cite"])
 
     # ── Tab 1: Summary ────────────────────────────────────────────────
     with t1:
@@ -377,29 +377,9 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
             )
             st.caption("Auto-generated from abstract. Configure an LLM for richer paragraphs.")
 
-    # ── Tab 3: Metrics ────────────────────────────────────────────────
+    # ── Tab 3: Cite ───────────────────────────────────────────────────
     with t3:
-        # Always show paper-level stats first
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.metric("Year", year if year else "–")
-        with m2:
-            st.metric("Citations", cites)
-        with m3:
-            score_display = f"{rel_score:.0%}" if rel_score is not None else "–"
-            st.metric("Relevance", score_display)
-        with m4:
-            st.metric("Full Text", "✅" if is_fulltext else "❌")
-
-        if key_metrics:
-            st.markdown("**📊 LLM-extracted metrics from this paper:**")
-            for m in key_metrics:
-                st.markdown(f"- {m}")
-        elif has_llm:
-            st.caption("No specific numeric metrics extracted by the LLM for this paper. See full paper for quantitative results.")
-
-    # ── Tab 4: Cite ───────────────────────────────────────────────────
-    with t4:
+   
         cite_key = f"cite_{idx}_{hash(paper.get('title',''))%99991}"
 
         apa_str    = _format_apa(paper)
