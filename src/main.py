@@ -308,13 +308,15 @@ render_header(
 
 # ── Sidebar ───────────────────────────────────────────────────────────
 with st.sidebar:
+
+    st.markdown("---")
     # User menu (shown if auth is active and user is logged in)
       if AUTH_AVAILABLE:
           try:
               render_user_menu()
           except Exception:
               pass
-
+            
     st.markdown("### 🔍 Research Parameters")
     query = st.text_input(
         "Research Topic",
@@ -342,8 +344,6 @@ with st.sidebar:
                     'clusters', 'current_page', 'last_query']:
             st.session_state[key] = [] if key not in ('clusters', 'current_page', 'last_query') else ({} if key == 'clusters' else (1 if key == 'current_page' else ''))
         st.rerun()
-
-    st.markdown("---")
 
     
     st.caption("© 2026 AI Research Assistant")
