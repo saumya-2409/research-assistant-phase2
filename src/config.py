@@ -64,7 +64,7 @@ CLUSTERING = {
     # Silhouette sweep range
     # max_k is computed adaptively as min(sqrt(N/2), 15, N//3)
     # These are absolute bounds
-    "min_k":           2,
+    "min_k":           3,
     "abs_max_k":       15,
 
     # LLM labelling
