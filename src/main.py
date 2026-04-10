@@ -291,6 +291,7 @@ _defaults = {
     'current_page':         1,
     'saved_papers_session': [],
     'last_query':           '',
+    'filter_reset_count':   0
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -641,35 +642,36 @@ if st.session_state.papers_data:
         st.markdown("### Papers & Summaries")
 
         # ── Filter controls ───────────────────────────────────────────
+        # Uses reset_count in widget keys so resetting forces fresh widgets
+        reset_n = st.session_state.get('filter_reset_count', 0)
+
         all_labels   = sorted(set(p.get('paper_label', '') for p in papers_data if p.get('paper_label')))
         all_clusters = {}
         for cid, info in clusters.items():
             for p in info.get('papers', []):
                 all_clusters[p.get('title', '')] = info.get('name', f'Cluster {int(cid)+1}')
 
+        label_options   = ['All'] + all_labels        
         cluster_options = ['All'] + sorted(set(all_clusters.values()))
-        label_options   = ['All'] + all_labels
+        
 
         fc1, fc2, fc3 = st.columns([2, 2, 1])
         with fc1:
             sel_label = st.selectbox(
-                "Filter by type",
-                label_options,
-                key="filter_label",
-                help="Foundational (highly cited, older), Current (recent, cited), Emerging (newest)"
+                "Filter by type", label_options,
+                key=f"filter_label_{reset_n}",
+                help="Foundational = highly cited older work · Current = recent & cited · Emerging = newest"
             )
         with fc2:
             sel_cluster = st.selectbox(
-                "Filter by research theme",
-                cluster_options,
-                key="filter_cluster"
+                "Filter by research theme", cluster_options,
+                key=f"filter_cluster_{reset_n}",
             )
         with fc3:
             st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-            if st.button("↺ Reset Filters", use_container_width=True):
-                st.session_state.filter_label   = 'All'
-                st.session_state.filter_cluster = 'All'
-                st.rerun()
+            if st.button("↺ Reset", use_container_width=True):
+              st.session_state['filter_reset_count'] = reset_n + 1
+              st.rerun()
 
         # Apply filters
         filtered = papers_data
