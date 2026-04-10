@@ -388,29 +388,13 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
         
         col1, col22 = st.columns(2)
         with col1:
-            st.subheader("APA 7th Edition")
-            st.text_area(
-                "APA",
-                value=apa_text,
-                height=150,
-                key="apa_citation"
-            )
-        with col2:
-            st.subheader("MLA 9th Edition")
-            st.text_area(
-                "MLA",
-                value=mla_text,
-                height=150,
-                key="mla_citation"
-            )
-
-        st.markdown("**APA 7th Edition**")
-        st.text_area("APA", value=apa_str, height=90,
+            st.markdown("**APA 7th Edition**")
+            st.text_area("APA", value=apa_str, height=90,
                      key=f"apa_{cite_key}", label_visibility="collapsed")
-
-        st.markdown("**MLA 9th Edition**")
-        st.text_area("MLA", value=mla_str, height=90,
-                     key=f"mla_{cite_key}", label_visibility="collapsed")
+        with col2:
+            st.markdown("**MLA 9th Edition**")
+            st.text_area("MLA", value=mla_str, height=90,
+                     key=f"mla_{cite_key}", label_visibility="collapsed"))
 
         st.markdown("**BibTeX**")
         st.text_area("BibTeX", value=bibtex_str, height=130,
