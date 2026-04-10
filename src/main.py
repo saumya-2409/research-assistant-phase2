@@ -641,89 +641,64 @@ if st.session_state.papers_data:
     with tab2:
         st.markdown("### Papers & Summaries")
 
-        # ── Filter controls ───────────────────────────────────────────
-        # Uses reset_count in widget keys so resetting forces fresh widgets
-        reset_n = st.session_state.get('filter_reset_count', 0)
+        #Multi-select filters inside a collapsible expander
+all_labels = sorted(set(p.get('paper_label', '') for p in papers_data if p.get('paper_label')))
+all_cluster_names = {}
+for cid, info in clusters.items():
+    for p in info.get('papers', []):
+        all_cluster_names[p.get('title', '')] = info.get('name', f'Cluster {int(cid)+1}')
+unique_clusters = sorted(set(all_cluster_names.values()))
 
-        all_labels   = sorted(set(p.get('paper_label', '') for p in papers_data if p.get('paper_label')))
-        all_clusters = {}
-        for cid, info in clusters.items():
-            for p in info.get('papers', []):
-                all_clusters[p.get('title', '')] = info.get('name', f'Cluster {int(cid)+1}')
+reset_n = st.session_state.get('filter_reset_count', 0)
 
-        label_options   = ['All'] + all_labels        
-        cluster_options = ['All'] + sorted(set(all_clusters.values()))
-        
+with st.expander("🔽 Filters", expanded=False):
+    fc1, fc2, fc3 = st.columns([2, 2, 1])
+    with fc1:
+        st.markdown("**Paper Type**")
+        st.caption("Select one or more — leave blank for all")
+        sel_labels = st.multiselect(
+            "Paper type",
+            options=all_labels,
+            default=[],
+            key=f"ms_label_{reset_n}",
+            label_visibility="collapsed",
+            placeholder="Foundational, Current, Emerging…"
+        )
+    with fc2:
+        st.markdown("**Research Theme**")
+        st.caption("Select one or more clusters")
+        sel_clusters = st.multiselect(
+            "Research theme",
+            options=unique_clusters,
+            default=[],
+            key=f"ms_cluster_{reset_n}",
+            label_visibility="collapsed",
+            placeholder="All themes…"
+        )
+    with fc3:
+        st.markdown("<div style='height:44px'></div>", unsafe_allow_html=True)
+        if st.button("↺ Reset", use_container_width=True, key=f"reset_filters_{reset_n}"):
+            st.session_state['filter_reset_count'] = reset_n + 1
+            st.rerun()
 
-        fc1, fc2, fc3 = st.columns([2, 2, 1])
-        with fc1:
-            sel_label = st.selectbox(
-                "Filter by type", label_options,
-                key=f"filter_label_{reset_n}",
-                help="Foundational = highly cited older work · Current = recent & cited · Emerging = newest"
-            )
-        with fc2:
-            sel_cluster = st.selectbox(
-                "Filter by research theme", cluster_options,
-                key=f"filter_cluster_{reset_n}",
-            )
-        with fc3:
-            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-            if st.button("↺ Reset", use_container_width=True):
-              st.session_state['filter_reset_count'] = reset_n + 1
-              st.rerun()
+    # Live count badge
+    active_filters = bool(sel_labels or sel_clusters)
+    if active_filters:
+        parts = []
+        if sel_labels:   parts.append(f"type: {', '.join(sel_labels)}")
+        if sel_clusters: parts.append(f"theme: {', '.join(sel_clusters)}")
+        st.caption(f"Active filters — {' · '.join(parts)}")
 
-        # Apply filters
-        filtered = papers_data
-        if sel_label != 'All':
-            filtered = [p for p in filtered if p.get('paper_label') == sel_label]
-        if sel_cluster != 'All':
-            filtered = [p for p in filtered
-                        if all_clusters.get(p.get('title', '')) == sel_cluster]
+# Apply filters
+filtered = papers_data
+if sel_labels:
+    filtered = [p for p in filtered if p.get('paper_label') in sel_labels]
+if sel_clusters:
+    filtered = [p for p in filtered
+                if all_cluster_names.get(p.get('title', '')) in sel_clusters]
 
-        if sel_label != 'All' or sel_cluster != 'All':
-            st.caption(f"Showing {len(filtered)} of {len(papers_data)} papers after filters")
-
-        if not filtered:
-            st.info("No papers match the selected filters. Try adjusting or resetting them.")
-        else:
-            # Pagination
-            ITEMS_PER_PAGE = 10
-            total_pages = max(1, (len(filtered) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
-            if st.session_state.current_page > total_pages:
-                st.session_state.current_page = 1
-
-            st.markdown(
-                f"<div style='color:#64748b;margin-bottom:15px;font-size:0.95rem;'>"
-                f"Page <strong>{st.session_state.current_page}</strong> of "
-                f"<strong>{total_pages}</strong> "
-                f"<span style='color:#94a3b8;'>({len(filtered)} papers)</span></div>",
-                unsafe_allow_html=True
-            )
-
-            start = (st.session_state.current_page - 1) * ITEMS_PER_PAGE
-            for i, paper in enumerate(filtered[start:start + ITEMS_PER_PAGE]):
-                render_paper_ui(paper, idx=start + i)
-
-            st.markdown("---")
-            p1, p2, p3 = st.columns([1, 3, 1])
-            with p1:
-                if st.button("← Prev", disabled=(st.session_state.current_page == 1),
-                             use_container_width=True, key="prev_btn"):
-                    st.session_state.current_page -= 1
-                    st.rerun()
-            with p2:
-                st.markdown(
-                    f"<div style='text-align:center;padding-top:8px;color:#64748b;font-weight:500;'>"
-                    f"Page {st.session_state.current_page} / {total_pages}</div>",
-                    unsafe_allow_html=True
-                )
-            with p3:
-                if st.button("Next →", disabled=(st.session_state.current_page == total_pages),
-                             use_container_width=True, key="next_btn"):
-                    st.session_state.current_page += 1
-                    st.rerun()
-
+if active_filters:
+    st.caption(f"Showing **{len(filtered)}** of **{len(papers_data)}** papers")
     # ── TAB 3: SAVED PAPERS ───────────────────────────────────────────
     with tab3:
         st.markdown("### 📚 Saved Papers")
