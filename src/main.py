@@ -311,11 +311,11 @@ with st.sidebar:
 
     st.markdown("---")
     # User menu (shown if auth is active and user is logged in)
-      if AUTH_AVAILABLE:
-          try:
-              render_user_menu()
-          except Exception:
-              pass
+    if AUTH_AVAILABLE:
+      try:
+        render_user_menu()
+      except Exception:
+        pass
             
     st.markdown("### 🔍 Research Parameters")
     query = st.text_input(
