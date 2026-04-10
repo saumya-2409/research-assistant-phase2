@@ -56,7 +56,8 @@ html, body, [class*="css"] {
 .stApp { background: #F5F4FF !important; }
 
 /* ── Hide Streamlit chrome ── */
-#MainMenu, footer, header { visibility: hidden; }
+#MainMenu, footer { visibility: hidden; }
+header { visibility: visible !important; }
 .stDeployButton { display: none; }
 
 /* ── Sidebar ── */
