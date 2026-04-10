@@ -335,7 +335,7 @@ with st.sidebar:
                     'clusters', 'current_page', 'last_query']:
             st.session_state[key] = [] if key not in ('clusters', 'current_page', 'last_query') else ({} if key == 'clusters' else (1 if key == 'current_page' else ''))
         st.rerun()
-    st.markdown("---")
+  
     # User menu (shown if auth is active and user is logged in)
     if AUTH_AVAILABLE:
       try:
@@ -343,6 +343,7 @@ with st.sidebar:
       except Exception:
         pass
     
+    st.markdown("---")
     st.caption("© 2026 AI Research Assistant")
 
     # ── PIPELINE (inside sidebar status) ─────────────────────────────
