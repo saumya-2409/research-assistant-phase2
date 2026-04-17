@@ -191,7 +191,7 @@ def render_header(n_papers: int = 0, n_sources: int = 0):
 # METRIC CARDS — use st.metric (always renders, no CSS dependency)
 # ─────────────────────────────────────────────────────────────────────
 
-def render_metrics(papers_data, full_text_papers, clusters):
+def render_metrics1(papers_data, full_text_papers, clusters):
     sources_count = len(set(p.get('source', '') for p in papers_data))
     avg_cites     = (
         int(sum(int(p.get('citations') or 0) for p in papers_data) / len(papers_data))
@@ -209,6 +209,23 @@ def render_metrics(papers_data, full_text_papers, clusters):
         st.metric("🗂️ Clusters", len(clusters))
     with c5:
         st.metric("🎓 Avg Citations", avg_cites)
+
+def render_metrics(papers_data, full_text_papers, clusters):
+    sources_count = len(set(p.get('source', '') for p in papers_data))
+    c1, c2, c3, c4 = st.columns(4)
+    for col, num, label in [
+        (c1, len(papers_data),      "Papers Analysed"),
+        (c2, len(full_text_papers), "Accessible"),
+        (c3, sources_count,         "Sources Used"),
+        (c4, len(clusters),         "Clusters Found"),
+    ]:
+        with col:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-number">{num}</div>
+                <div class="metric-label">{label}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────
