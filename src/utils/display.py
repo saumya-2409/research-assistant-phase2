@@ -466,7 +466,7 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
                         key=f"mla_{cite_key}", label_visibility="collapsed")
 
         # Row 2: IEEE + BibTeX
-        col3, col4 = st.columns(2)
+        col3, col4 = st.columns([1,1])
         with col3:
             st.markdown("**IEEE**")
             st.text_area("IEEE", value=ieee_str, height=90,
