@@ -103,45 +103,6 @@ def _format_apa(paper: dict) -> str:
         cite += f" {url}"
     return cite
 
-# Inside display.py, near other citation formatters (_format_apa, etc.)
-
-def _format_ieee(paper: dict) -> str:
-    """Generate IEEE citation string."""
-    authors_list = paper.get('authors', []) or []
-    title = paper.get('title', 'Untitled')
-    venue = paper.get('venue', '')
-    year = paper.get('year', '')
-    doi = paper.get('doi', '')
-    
-    # Format Authors: Initial. Surname
-    if isinstance(authors_list, list) and authors_list:
-        formatted_authors = []
-        for a in authors_list[:6]:  # IEEE typically uses et al. after 6 authors
-            parts = str(a).strip().split()
-            if len(parts) > 1:
-                initials = "".join([p[0].upper() + "." for p in parts[:-1]])
-                formatted_authors.append(f"{initials} {parts[-1]}")
-            else:
-                formatted_authors.append(str(a))
-        
-        if len(authors_list) > 6:
-            au_str = formatted_authors[0] + " et al."
-        elif len(formatted_authors) > 1:
-            au_str = ", ".join(formatted_authors[:-1]) + ", and " + formatted_authors[-1]
-        else:
-            au_str = formatted_authors[0]
-    else:
-        au_str = "Unknown Author"
-
-    cite = f'{au_str}, "{title},"'
-    if venue:
-        cite += f" {venue},"
-    if year:
-        cite += f" {year}."
-    if doi:
-        cite += f" doi: {doi}."
-    
-    return cite
 
 def _format_mla(paper: dict) -> str:
     """Generate MLA 9th edition citation string."""
@@ -453,10 +414,9 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
 
         apa_str    = _format_apa(paper)
         mla_str    = _format_mla(paper)
-        ieee_str   = _format_ieee(paper)
         bibtex_str = _format_bibtex_entry(paper)
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             st.markdown("**APA 7th Edition**")
             st.text_area("APA", value=apa_str, height=90,
@@ -465,10 +425,6 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
             st.markdown("**MLA 9th Edition**")
             st.text_area("MLA", value=mla_str, height=90,
                      key=f"mla_{cite_key}", label_visibility="collapsed")
-        with col3: # <--- New block
-            st.markdown("**IEEE**")
-            st.text_area("IEEE", value=ieee_str, height=90,
-                     key=f"ieee_{cite_key}", label_visibility="collapsed")
 
         st.markdown("**BibTeX**")
         st.text_area("BibTeX", value=bibtex_str, height=130,
@@ -597,7 +553,6 @@ def render_saved_paper_card(paper: dict, idx: int = 0):
     src     = paper.get("source", "")
     url     = paper.get("url", "")
     apa     = _format_apa(paper)
-    ieee = _format_ieee(paper)
 
     with st.expander(f"🔖 {title}", expanded=False):
         st.markdown(f"""
@@ -609,15 +564,8 @@ def render_saved_paper_card(paper: dict, idx: int = 0):
 
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.markdown("**Citations:**")
-            cite_tabs = st.tabs(["APA", "IEEE"]) # Add tabs for saved papers to save space
-            with cite_tabs[0]:
-                st.text_area("APA", value=apa, height=70, 
-                         key=f"saved_apa_{idx}", label_visibility="collapsed")
-            with cite_tabs[1]:
-                st.text_area("IEEE", value=ieee, height=70, 
-                         key=f"saved_ieee_{idx}", label_visibility="collapsed")
-                st.text_area("APA", value=apa, height=80,
+            st.markdown("**Citation (APA):**")
+            st.text_area("APA", value=apa, height=80,
                          key=f"saved_apa_{idx}_{hash(title)%99991}",
                          label_visibility="collapsed")
         with col2:
