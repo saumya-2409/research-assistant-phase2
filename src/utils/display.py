@@ -134,6 +134,44 @@ def _format_mla(paper: dict) -> str:
         cite += f" {url}."
     return cite
 
+def _format_ieee(paper: dict) -> str:
+    """Generate IEEE citation string (author initials, title quoted, journal italic, year)."""
+    authors = paper.get('authors', []) or []
+    year    = paper.get('year', 'n.d.')
+    title   = paper.get('title', 'Untitled')
+    source  = paper.get('source', '')
+    url     = paper.get('url', '') or paper.get('pdf_url', '') or ''
+    doi     = paper.get('doi', '') or ''
+
+    def _ieee_name(name: str) -> str:
+        parts = str(name).strip().split()
+        if len(parts) == 1:
+            return parts[0]
+        surname  = parts[-1]
+        initials = '. '.join(p[0].upper() for p in parts[:-1]) + '.'
+        return f"{initials} {surname}"
+
+    if isinstance(authors, list) and authors:
+        clean = [str(a).strip() for a in authors if a]
+        if not clean:
+            au_str = 'Unknown'
+        elif len(clean) <= 6:
+            au_str = ', '.join(_ieee_name(a) for a in clean)
+        else:
+            au_str = ', '.join(_ieee_name(a) for a in clean[:6]) + ' et al.'
+    else:
+        au_str = str(authors).strip() if authors else 'Unknown'
+
+    cite = f'{au_str}, "{title},"'
+    if source and source.lower() not in ['unknown', '']:
+        cite += f" *{source}*,"
+    if year:
+        cite += f" {year}."
+    if doi:
+        cite += f" doi: {doi}."
+    elif url:
+        cite += f" [Online]. Available: {url}"
+    return cite
 
 def _format_bibtex_entry(paper: dict) -> str:
     """Generate a single BibTeX @article entry."""
@@ -409,35 +447,52 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
 
     # ── Tab 3: Cite ───────────────────────────────────────────────────
     with t3:
-   
         cite_key = f"cite_{idx}_{hash(paper.get('title',''))%99991}"
 
         apa_str    = _format_apa(paper)
         mla_str    = _format_mla(paper)
+        ieee_str   = _format_ieee(paper)
         bibtex_str = _format_bibtex_entry(paper)
-        
+
+        # Row 1: APA + MLA
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**APA 7th Edition**")
             st.text_area("APA", value=apa_str, height=90,
-                     key=f"apa_{cite_key}", label_visibility="collapsed")
+                        key=f"apa_{cite_key}", label_visibility="collapsed")
         with col2:
             st.markdown("**MLA 9th Edition**")
             st.text_area("MLA", value=mla_str, height=90,
-                     key=f"mla_{cite_key}", label_visibility="collapsed")
+                        key=f"mla_{cite_key}", label_visibility="collapsed")
 
-        st.markdown("**BibTeX**")
-        st.text_area("BibTeX", value=bibtex_str, height=130,
-                     key=f"bib_{cite_key}", label_visibility="collapsed")
+        # Row 2: IEEE + BibTeX
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("**IEEE**")
+            st.text_area("IEEE", value=ieee_str, height=90,
+                        key=f"ieee_{cite_key}", label_visibility="collapsed")
+        with col4:
+            st.markdown("**BibTeX**")
+            st.text_area("BibTeX", value=bibtex_str, height=90,
+                        key=f"bib_{cite_key}", label_visibility="collapsed")
+
+        # DOI / URL lookup link
+        paper_url = paper.get('url') or paper.get('pdf_url') or ''
+        doi_val   = paper.get('doi', '')
+        lookup_url = (f"https://doi.org/{doi_val}" if doi_val else paper_url)
+        if lookup_url:
+            st.markdown(
+                f"🔍 [Look up on CrossRef/DOI]({lookup_url}) — paste the DOI there "
+                f"to get publisher-verified citation in any format."
+            )
 
         st.markdown("""
         <div style="background:#FFF8E7;border:1px solid #F5C875;border-radius:8px;
                     padding:10px 14px;font-size:12px;color:#633806;margin-top:8px;">
-            ⚠️ Auto-generated citations. Always verify against the original paper
-            for accuracy before submitting to journals or assignments.
+            ⚠️ Auto-generated. Always verify against the original paper before submitting.
         </div>
         """, unsafe_allow_html=True)
-
+ 
     # ── Action buttons ─────────────────────────────────────────────────
     st.divider()
     btn_cols = st.columns(4)
