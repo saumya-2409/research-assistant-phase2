@@ -124,6 +124,29 @@ header { visibility: visible !important; }
     color: white !important;
 }
 
+/* ── Metric cards ── */
+.metric-card {
+    background: white;
+    border: 1px solid #E8E6FF;
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+}
+.metric-number {
+    font-size: 32px;
+    font-weight: 600;
+    color: #5B4EE8;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+.metric-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9B97C4;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
 /* Tags */
 .tag {
     display: inline-block;
