@@ -3,6 +3,7 @@ AI Research Assistant — main Streamlit entry point.
 Handles UI layout, search orchestration, and results display.
 """
 
+#Imports
 import streamlit as st
 import warnings
 import os
@@ -33,13 +34,15 @@ try:
 except Exception:
     AUTH_AVAILABLE = False
 
-load_dotenv()
 
-warnings.filterwarnings("ignore")
-os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-logging.getLogger().setLevel(logging.ERROR)
+# For cleaning up the Python environment and controlling runtime behavior
+load_dotenv()   # Loads environment variables from a .env file into your system environment; Keeps sensitive data (API keys, secrets) out of your code
 
-# ── Page config ───────────────────────────────────────────────────────
+warnings.filterwarnings("ignore") # Suppresses all warning messages
+os.environ['TOKENIZERS_PARALLELISM'] = 'false' # Controls parallelism in Hugging Face tokenizers
+logging.getLogger().setLevel(logging.ERROR) # Sets global logging level to only show errors
+
+# ── Streamlit configuration ───────────────────────────────────────────────────────
 st.set_page_config(
     page_title="AI Research Assistant",
     page_icon="🔬",
@@ -56,229 +59,12 @@ except Exception:
 if AUTH_AVAILABLE:
     render_auth_gate()
 
-# ── CSS ───────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+# ── Loading CSS ───────────────────────────────────────────────────────────────
+def load_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-*, *::before, *::after { box-sizing: border-box; }
-html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
-.stApp { background: #F5F4FF !important; }
-
-#MainMenu, footer { visibility: hidden; }
-header { visibility: visible !important; }
-.stDeployButton { display: none; }
-
-[data-testid="stSidebar"] {
-    background: #FFFFFF !important;
-    border-right: 1px solid #E8E6FF !important;
-    padding-top: 0 !important;
-}
-[data-testid="stSidebar"] > div:first-child { padding-top: 1.5rem; }
-[data-testid="stSidebar"] .stMarkdown h3 {
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-    color: #9B97C4 !important;
-    margin-bottom: 8px !important;
-    margin-top: 20px !important;
-}
-
-.main .block-container {
-    padding: 2rem 2.5rem 4rem !important;
-    max-width: 1200px !important;
-}
-
-.app-header {
-    background: linear-gradient(135deg, #5B4EE8 0%, #7B6FF0 100%);
-    border-radius: 16px;
-    padding: 28px 32px;
-    margin-bottom: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.app-header h1 {
-    color: white !important;
-    font-size: 22px !important;
-    font-weight: 600 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-.app-header p {
-    color: rgba(255,255,255,0.80) !important;
-    font-size: 14px !important;
-    margin: 4px 0 0 0 !important;
-}
-.header-badge {
-    background: rgba(255,255,255,0.20);
-    border: 1px solid rgba(255,255,255,0.35);
-    border-radius: 20px;
-    padding: 6px 14px;
-    color: white;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-/* Buttons */
-.stButton > button {
-    border-radius: 10px !important;
-    font-weight: 500 !important;
-    font-size: 14px !important;
-    padding: 9px 20px !important;
-    transition: all 0.15s ease !important;
-    border: 1px solid #E0DEFF !important;
-    background: white !important;
-    color: #3D35A8 !important;
-}
-.stButton > button:hover {
-    background: #F0EEFF !important;
-    border-color: #5B4EE8 !important;
-    transform: translateY(-1px) !important;
-}
-.stButton > button[kind="primary"] {
-    background: #5B4EE8 !important;
-    color: white !important;
-    border-color: #5B4EE8 !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #4A3DD4 !important;
-}
-
-/* Text input */
-.stTextInput > div > div > input {
-    border-radius: 10px !important;
-    border: 1px solid #E0DEFF !important;
-    padding: 10px 14px !important;
-    font-size: 14px !important;
-    background: white !important;
-    color: #1A1744 !important;
-}
-.stTextInput > div > div > input:focus {
-    border-color: #5B4EE8 !important;
-    box-shadow: 0 0 0 3px rgba(91,78,232,0.1) !important;
-}
-.stTextInput > div > div > input::placeholder { color: #B0ACDF !important; }
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-    background: white !important;
-    border-radius: 12px !important;
-    padding: 5px !important;
-    border: 1px solid #E8E6FF !important;
-    gap: 3px !important;
-    margin-bottom: 20px !important;
-}
-.stTabs [data-baseweb="tab"] {
-    border-radius: 8px !important;
-    padding: 8px 18px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    color: #8B87C0 !important;
-    background: transparent !important;
-}
-.stTabs [aria-selected="true"] {
-    background: #5B4EE8 !important;
-    color: white !important;
-}
-
-/* Tags */
-.tag {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 500;
-    margin-right: 5px;
-    margin-bottom: 4px;
-}
-.tag-purple  { background: #EEEDFE; color: #3C3489; }
-.tag-teal    { background: #E1F5EE; color: #0F6E56; }
-.tag-amber   { background: #FAEEDA; color: #633806; }
-.tag-coral   { background: #FAECE7; color: #712B13; }
-.tag-blue    { background: #E6F1FB; color: #0C447C; }
-.tag-green   { background: #EAF3DE; color: #27500A; }
-.tag-gray    { background: #F1EFE8; color: #444441; }
-
-/* Paper cards */
-.paper-card {
-    background: white;
-    border: 1px solid #E8E6FF;
-    border-radius: 14px;
-    padding: 20px 22px;
-    margin-bottom: 12px;
-    transition: box-shadow 0.15s, transform 0.15s;
-}
-.paper-card:hover {
-    box-shadow: 0 4px 20px rgba(91,78,232,0.08);
-    transform: translateY(-1px);
-}
-
-/* Cluster cards */
-.cluster-card {
-    background: white;
-    border: 1px solid #E8E6FF;
-    border-radius: 14px;
-    padding: 18px 20px;
-    margin-bottom: 10px;
-}
-
-/* Step dots */
-.step-dot {
-    width: 30px; height: 30px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600; flex-shrink: 0;
-}
-.step-done   { background: #E1F5EE; color: #0F6E56; }
-.step-active { background: #5B4EE8; color: white; }
-.step-wait   { background: #F1EFE8; color: #B4B2A9; }
-
-/* Info boxes */
-.warning-box {
-    background: #FAEEDA; border: 1px solid #F5C875;
-    border-radius: 12px; padding: 14px 16px;
-    font-size: 13px; color: #633806; margin-bottom: 12px;
-}
-.success-box {
-    background: #E1F5EE; border: 1px solid #9FE1CB;
-    border-radius: 12px; padding: 14px 16px;
-    font-size: 13px; color: #0F6E56; margin-bottom: 12px;
-}
-
-/* Expanders */
-[data-testid="stExpander"] {
-    background: white !important;
-    border: 1px solid #E8E6FF !important;
-    border-radius: 14px !important;
-    overflow: hidden !important;
-    margin-bottom: 10px !important;
-}
-[data-testid="stExpander"] summary {
-    padding: 14px 18px !important;
-    font-weight: 500 !important;
-    font-size: 14px !important;
-    color: #1A1744 !important;
-}
-[data-testid="stExpander"] summary:hover { background: #F8F7FF !important; }
-
-/* Progress bar */
-[data-testid="stProgressBar"] > div > div {
-    background: #5B4EE8 !important; border-radius: 4px !important;
-}
-[data-testid="stProgressBar"] > div {
-    background: #EAE8FF !important; border-radius: 4px !important;
-}
-
-hr { border-color: #E8E6FF !important; }
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #F5F4FF; }
-::-webkit-scrollbar-thumb { background: #C8C4F0; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #5B4EE8; }
-</style>
-""", unsafe_allow_html=True)
+load_css("style.css")
 
 # ── Session state ─────────────────────────────────────────────────────
 _defaults = {
