@@ -441,6 +441,26 @@ if st.session_state.papers_data:
     # ── TAB 2: PAPERS & SUMMARIES ─────────────────────────────────────
     with tab2:
         st.markdown("### Papers & Summaries")
+        st.markdown("""
+            <div style="background:#F8F7FF;border:1px solid #E0DEFF;border-radius:12px;
+                        padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:2;">
+                <div style="font-weight:600;color:#1A1744;margin-bottom:8px;">📖 Legend</div>
+                <div style="display:flex;flex-wrap:wrap;gap:20px;">
+                    <div>
+                        <strong>Paper type</strong><br>
+                        ⭐ <span style="background:#EEEDFE;color:#3C3489;padding:2px 7px;border-radius:10px;font-size:11px;">Foundational</span> — highly cited, older work (&gt;200 cites)<br>
+                        ✅ <span style="background:#E1F5EE;color:#0F6E56;padding:2px 7px;border-radius:10px;font-size:11px;">Current</span> — recent &amp; cited (≤5 yrs, ≥20 cites)<br>
+                        🚀 <span style="background:#FAEEDA;color:#633806;padding:2px 7px;border-radius:10px;font-size:11px;">Emerging</span> — very recent (≤2 years old)
+                    </div>
+                    <div>
+                        <strong>Content available</strong><br>
+                        📄 <span style="background:#E1F5EE;color:#0F6E56;padding:2px 7px;border-radius:10px;font-size:11px;">full text</span> — summary from full paper PDF<br>
+                        ⚡ <span style="background:#FAEEDA;color:#633806;padding:2px 7px;border-radius:10px;font-size:11px;">abstract only</span> — summary from abstract<br>
+                        🎯 <code>0.xx relevance</code> — semantic match score to your query (0–1)
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         # ── Filter controls ───────────────────────────────────────────
         # Uses reset_count in widget keys so resetting forces fresh widgets
