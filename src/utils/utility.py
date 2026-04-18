@@ -8,9 +8,9 @@ import re
 import math
 from typing import List, Dict
 from collections import Counter
+from datetime import datetime
 
-CURRENT_YEAR = 2025
-
+CURRENT_YEAR = datetime.now().year
 
 def is_paywalled_response(response: requests.Response) -> bool:
     if response.status_code in (401, 403):
