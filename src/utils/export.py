@@ -37,35 +37,17 @@ def export_to_excel(papers: List[Dict], clusters: Dict, query: str) -> bytes:
         else:
             authors_str = str(authors)
 
-        # Extract AI summary fields safely — works whether LLM ran or not
-        _summary   = p.get('ai_summary') or {}
-        _problem   = _summary.get('Research_Problem', '') or ''
-        _findings  = _summary.get('Key_Findings', []) or []
-        _lit_para  = _summary.get('Literature_Review_Paragraph', '') or ''
-
-        # Key findings: join list into numbered lines for readability in Excel
-        if isinstance(_findings, list):
-            _findings_str = '\n'.join(
-                f"{i+1}. {f}" for i, f in enumerate(_findings) if f
-            )
-        else:
-            _findings_str = str(_findings)
-
-    
         rows.append({
-            'Cluster No.':         paper_to_cluster_no.get(key, ''),
-            'Cluster Theme':       paper_to_cluster_name.get(key, ''),
-            'Title':               p.get('title', ''),
-            'Authors':             authors_str,
-            'Year':                p.get('year', ''),
-            'Source':              p.get('source', ''),
-            'Citations':           p.get('citations', 'N/A'),
-            'Relevance Score':     p.get('relevance_score', ''),
-            'Abstract':            p.get('abstract', '')[:300],
-            'Problem Statement':   _problem[:500],
-            'Key Findings':        _findings_str[:600],
-            'Literature Review':   _lit_para[:800],
-            'URL':                 p.get('url', '')
+            'Cluster No.':    paper_to_cluster_no.get(key, ''),
+            'Cluster Theme':  paper_to_cluster_name.get(key, ''),
+            'Title':          p.get('title', ''),
+            'Authors':        authors_str,
+            'Year':           p.get('year', ''),
+            'Source':         p.get('source', ''),
+            'Citations':      p.get('citations', 'N/A'),
+            'Relevance Score': p.get('relevance_score', ''),
+            'Abstract':       p.get('abstract', '')[:300],
+            'URL':            p.get('url', '')
         })
 
     df = pd.DataFrame(rows)
@@ -116,9 +98,9 @@ def export_to_excel(papers: List[Dict], clusters: Dict, query: str) -> bytes:
 
         # Column widths
         col_widths = {
-            'A': 10, 'B': 28, 'C': 52, 'D': 28,
-            'E': 8,  'F': 18, 'G': 10, 'H': 14,
-            'I': 45, 'J': 52, 'K': 55, 'L': 65, 'M': 45
+            'A': 10, 'B': 28, 'C': 52, 'D': 30,
+            'E': 8,  'F': 20, 'G': 10, 'H': 14,
+            'I': 50, 'J': 45
         }
         for col, w in col_widths.items():
             ws.column_dimensions[col].width = w
@@ -191,4 +173,3 @@ def generate_bibtex(papers: List[Dict]) -> str:
         entries.append(entry)
 
     return '\n\n'.join(entries)
-
