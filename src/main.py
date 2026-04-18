@@ -324,59 +324,77 @@ if st.session_state.papers_data:
                       '#0C447C', '#712B13', '#27500A', '#3C3489']
 
             # Chart row
-            col1, col2 = st.columns(2, gap="large")
+            col1, col2, col3 = st.columns(3, gap="large")
 
-            with col1:
-                # Paper count bar — horizontal, easy to read
-                fig = go.Figure(go.Bar(
-                    x=cluster_counts,
-                    y=cluster_names,
-                    orientation='h',
-                    marker_color=COLORS[:len(cluster_names)],
-                    text=cluster_counts,
-                    textposition='outside',
-                ))
-                fig.update_layout(
-                    title="Papers per Research Theme",
-                    xaxis_title="Number of Papers",
-                    yaxis_title="",
-                    font=dict(family="Inter", size=12),
-                    height=max(250, len(cluster_names) * 52),
-                    margin=dict(l=10, r=40, t=40, b=10),
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    xaxis=dict(gridcolor='#E8E6FF'),
-                )
-                st.plotly_chart(fig, use_container_width=True)
+with col1:
+    # Pie chart — topic distribution
+    fig_pie = go.Figure(go.Pie(
+        labels=cluster_names,
+        values=cluster_counts,
+        hole=0.35,
+        marker_colors=COLORS[:len(cluster_names)],
+        textinfo='percent+label',
+        textfont_size=11,
+    ))
+    fig_pie.update_layout(
+        title="Topic Distribution",
+        font=dict(family="Inter", size=11),
+        height=300,
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
 
-            with col2:
-                # Avg citations scatter — year on x, cites on y, size = paper count
-                fig2 = go.Figure(go.Scatter(
-                    x=cluster_years if any(cluster_years) else cluster_names,
-                    y=cluster_cites,
-                    mode='markers+text',
-                    marker=dict(
-                        size=[max(18, c * 3) for c in cluster_counts],
-                        color=COLORS[:len(cluster_names)],
-                        opacity=0.85,
-                    ),
-                    text=cluster_names,
-                    textposition='top center',
-                    textfont=dict(size=10),
-                ))
-                fig2.update_layout(
-                    title="Avg Citations by Theme (bubble = paper count)",
-                    xaxis_title="Avg Publication Year",
-                    yaxis_title="Avg Citations",
-                    font=dict(family="Inter", size=12),
-                    height=max(250, len(cluster_names) * 52),
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    xaxis=dict(gridcolor='#E8E6FF'),
-                    yaxis=dict(gridcolor='#E8E6FF'),
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+with col2:
+    # Paper count bar
+    fig_bar = go.Figure(go.Bar(
+        x=cluster_counts, y=cluster_names, orientation='h',
+        marker_color=COLORS[:len(cluster_names)],
+        text=cluster_counts, textposition='outside',
+    ))
+    fig_bar.update_layout(
+        title="Papers per Theme",
+        xaxis_title="Papers", yaxis_title="",
+        font=dict(family="Inter", size=11),
+        height=300,
+        margin=dict(l=10, r=40, t=40, b=10),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(gridcolor='#E8E6FF'),
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+with col3:
+    # Avg citations bubble
+    fig_scatter = go.Figure(go.Scatter(
+        x=cluster_years if any(cluster_years) else list(range(len(cluster_names))),
+        y=cluster_cites,
+        mode='markers+text',
+        marker=dict(
+            size=[max(14, c * 4) for c in cluster_counts],
+            color=COLORS[:len(cluster_names)],
+            opacity=0.85,
+        ),
+        text=cluster_names,
+        textposition='top center',
+        textfont=dict(size=9),
+    ))
+    fig_scatter.update_layout(
+        title="Citations by Year (size=papers)",
+        xaxis_title="Avg Year",
+        yaxis_title="Avg Citations",
+        font=dict(family="Inter", size=11),
+        height=300,
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(gridcolor='#E8E6FF'),
+        yaxis=dict(gridcolor='#E8E6FF'),
+    )
+    st.plotly_chart(fig_scatter, use_container_width=True)
+  
+
 
             # Cluster cards
             st.markdown("### Research Themes")
