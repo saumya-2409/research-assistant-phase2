@@ -47,6 +47,4 @@ groq
 keybert
 openpyxl
 
-google-generativeai
-
 torchvision
