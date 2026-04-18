@@ -26,9 +26,6 @@ from clustering import PaperClusterer
 from config import RETRIEVAL
 from database import init_database
 from utils.export import export_to_excel, generate_bibtex
-from pipeline import run_pipeline
-from database import get_cached_search, save_search, get_saved_papers, save_paper
-
 
 # ── Auth ──────────────────────────────────────────────────────────────
 try:
@@ -118,11 +115,6 @@ with st.sidebar:
         clear_btn = st.button(
             "🗑️ Clear", type="secondary", use_container_width=True,
         )
-    
-    st.session_state.force_refresh = st.checkbox(
-        "🔄 Force re-fetch (ignore cache)", value=False,
-        help="By default, results for the same query are cached for 7 days. Check this to re-fetch fresh papers."
-    )
 
     if clear_btn:
         for key in ['papers_data', 'full_text_papers', 'suggested_papers',
@@ -144,32 +136,153 @@ with st.sidebar:
     if start_btn and query.strip():
         st.session_state.processing = True
         st.session_state.last_query = query.strip()
-        user_id = (st.session_state.get('user') or {}).get('id')
-        force   = st.session_state.get('force_refresh', False)
 
-        with st.status("🚀 Running Research Pipeline...", expanded=True) as status:
-            result = run_pipeline(
-                query          = query.strip(),
-                papers_per_source = papers_per_source,
-                summarizer     = st.session_state.summarizer,
-                user_id        = user_id,
-                force_refresh  = force,
-            )
-            
-            if result['error']:
-                st.error(result['error'])
-            else:
-                st.session_state.papers_data      = result['papers_data']
-                st.session_state.full_text_papers  = result['full_text_papers']
-                st.session_state.suggested_papers  = result['suggested_papers']
-                st.session_state.clusters          = result['clusters']
+        with st.status("🚀 Initiating Research Sequence...", expanded=True) as status:
+            try:
+                # STEP 1: Fetch
+                st.write("1️⃣ **Fetching papers from all sources...**")
+                t0 = time.time()
+                fetcher = IntelligentMultiSourceFetcher()
+                raw_papers, total_fetched = fetcher.fetch_papers(
+                    query, sources=None, papers_per_source=50, user_requested=None
+                )
+                st.write(f"   Found {total_fetched} unique papers in {time.time()-t0:.1f}s")
+
+                if not raw_papers:
+                    status.update(label="❌ No papers found. Try different keywords.", state="error")
+                    st.session_state.processing = False
+                    st.stop()
+
+                # STEP 2: Access check
+                st.write("2️⃣ **Checking paper accessibility...**")
+                accessible, restricted = [], []
+                for p in raw_papers:
+                    has_content = (
+                        p.get('pdf_available') or p.get('extracted_content') or
+                        p.get('is_open_access') or len(p.get('abstract', '')) > 50
+                    )
+                    (accessible if has_content else restricted).append(p)
+                st.write(f"   {len(accessible)} accessible · {len(restricted)} restricted")
+
+                if not accessible:
+                    status.update(label="⚠️ All papers are behind paywalls.", state="error")
+                    st.session_state.suggested_papers = restricted
+                    st.session_state.papers_data = []
+                    st.session_state.processing = False
+                    st.stop()
+
+                # STEP 3: Relevance filter
+                st.write("3️⃣ **Scoring relevance...**")
+                _model  = load_embedding_model()
+                qemb    = _model.encode(query, convert_to_tensor=True) if _model else None
+                scored, source_stats = [], {}
+                for p in accessible:
+                    score = compute_relevance_embedding_score(query, p, query_embedding=qemb)
+                    p['relevance_score'] = round(score, 3)
+                    src = p.get('source', 'unknown')
+                    source_stats.setdefault(src, {'total': 0, 'passed': 0})
+                    source_stats[src]['total'] += 1
+                    if score >= RETRIEVAL["relevance_threshold"]:
+                        scored.append(p)
+                        source_stats[src]['passed'] += 1
+
+                for src, stats in sorted(source_stats.items()):
+                    pct = stats['passed'] / stats['total'] * 100 if stats['total'] else 0
+                    st.write(f"   {src}: {stats['passed']}/{stats['total']} relevant ({pct:.0f}%)")
+
+                if not scored:
+                    status.update(label="⚠️ No relevant papers. Try broader keywords.", state="error")
+                    st.session_state.processing = False
+                    st.stop()
+
+                # STEP 4: Rank + slice
+                st.write("4️⃣ **Ranking papers...**")
+                ranked      = rank_papers(scored)
+                final       = ranked[:papers_per_source]
+                composition = Counter(p.get('source', 'unknown') for p in final)
+                st.write("   **Source breakdown:** " +
+                         " | ".join(f"{s}: {n}" for s, n in composition.most_common()))
+
+                # STEP 5: Summarise
+                st.write(f"5️⃣ **Generating AI summaries for {len(final)} papers...**")
+                summarizer_instance = st.session_state.summarizer
+                progress = st.progress(0)
+                status_txt = st.empty()
+                papers_data, full_text_papers, suggested_papers = [], [], list(restricted)
+                done = 0
+
+                def _process(p):
+                    try:
+                        s = summarizer_instance.summarize_paper(p, use_full_text=True, query=query)
+                        if not isinstance(s, dict):
+                            s = {}
+                    except Exception:
+                        s = {}
+                    p['ai_summary'] = s
+                    explicit = s.get('accessibility')
+                    p['accessibility'] = (
+                        'inaccessible'
+                        if explicit == 'inaccessible' and not p.get('abstract')
+                        else 'accessible'
+                    )
+                    p['abstract_summary_status'] = s.get('abstract_summary_status', 'extractive_fallback')
+                    return p
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+                    futures = {ex.submit(_process, p): p for p in final}
+                    for future in concurrent.futures.as_completed(futures):
+                        try:
+                            result = future.result()
+                        except Exception:
+                            result = futures[future]
+                            result['accessibility'] = 'accessible'
+                            result['abstract_summary_status'] = 'extractive_fallback'
+                            result['ai_summary'] = {}
+                        done += 1
+                        pct   = done / len(final)
+                        badge = ('📄' if result.get('abstract_summary_status') == 'generated_from_fulltext'
+                                 else '⚡' if result.get('abstract_summary_status') == 'generated_from_abstract'
+                                 else '📝')
+                        progress.progress(pct)
+                        status_txt.markdown(f"**{badge} {done}/{len(final)}** — {result.get('title','')[:55]}...")
+                        if result.get('accessibility') == 'accessible':
+                            papers_data.append(result)
+                            if (result.get('extracted_content') or
+                                    result.get('abstract_summary_status') == 'generated_from_fulltext'):
+                                full_text_papers.append(result)
+                        else:
+                            suggested_papers.append(result)
+
+                progress.empty()
+                status_txt.empty()
+
+                # STEP 6: Save state
+                st.session_state.papers_data      = papers_data
+                st.session_state.full_text_papers  = full_text_papers
+                st.session_state.suggested_papers  = suggested_papers
+                st.session_state.processing        = False
                 st.session_state.current_page      = 1
-                status.update(label=f"✅ Done — {len(result['papers_data'])} papers analysed",
-                            state="complete", expanded=False)
+
+                status.update(label=f"✅ Done — {len(papers_data)} papers analysed",
+                              state="complete", expanded=False)
+
+                # STEP 7: Cluster
+                if papers_data:
+                    st.write("6️⃣ **Clustering by research theme...**")
+                    try:
+                        clusterer = PaperClusterer()
+                        st.session_state.clusters = clusterer.cluster_papers(papers_data)
+                    except Exception as ce:
+                        st.warning(f"Clustering skipped: {ce}")
+                        st.session_state.clusters = {}
+
                 st.balloons()
-            
-            st.session_state.processing   = False
-            st.session_state.force_refresh = False
+
+            except Exception as e:
+                status.update(label="❌ An error occurred.", state="error")
+                st.error(f"Error: {e}")
+                st.session_state.processing = False
+
 
 # ── MAIN CONTENT ─────────────────────────────────────────────────────
 if st.session_state.papers_data:
