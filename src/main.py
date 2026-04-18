@@ -325,324 +325,325 @@ if st.session_state.papers_data:
 
             # Chart row
             col1, col2, col3 = st.columns(3, gap="large")
+            
+            with col1:
+                # Pie chart — topic distribution
+                fig_pie = go.Figure(go.Pie(
+                    labels=cluster_names,
+                    values=cluster_counts,
+                    hole=0.35,
+                    marker_colors=COLORS[:len(cluster_names)],
+                    textinfo='percent+label',
+                    textfont_size=11,
+                ))
+                fig_pie.update_layout(
+                    title="Topic Distribution",
+                    font=dict(family="Inter", size=11),
+                    height=300,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
 
-with col1:
-    # Pie chart — topic distribution
-    fig_pie = go.Figure(go.Pie(
-        labels=cluster_names,
-        values=cluster_counts,
-        hole=0.35,
-        marker_colors=COLORS[:len(cluster_names)],
-        textinfo='percent+label',
-        textfont_size=11,
-    ))
-    fig_pie.update_layout(
-        title="Topic Distribution",
-        font=dict(family="Inter", size=11),
-        height=300,
-        margin=dict(l=10, r=10, t=40, b=10),
-        paper_bgcolor='rgba(0,0,0,0)',
-        showlegend=False,
-    )
-    st.plotly_chart(fig_pie, use_container_width=True)
+            with col2:
+                # Paper count bar
+                fig_bar = go.Figure(go.Bar(
+                    x=cluster_counts, y=cluster_names, orientation='h',
+                    marker_color=COLORS[:len(cluster_names)],
+                    text=cluster_counts, textposition='outside',
+                ))
+                fig_bar.update_layout(
+                    title="Papers per Theme",
+                    xaxis_title="Papers", yaxis_title="",
+                    font=dict(family="Inter", size=11),
+                    height=300,
+                    margin=dict(l=10, r=40, t=40, b=10),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(gridcolor='#E8E6FF'),
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
 
-with col2:
-    # Paper count bar
-    fig_bar = go.Figure(go.Bar(
-        x=cluster_counts, y=cluster_names, orientation='h',
-        marker_color=COLORS[:len(cluster_names)],
-        text=cluster_counts, textposition='outside',
-    ))
-    fig_bar.update_layout(
-        title="Papers per Theme",
-        xaxis_title="Papers", yaxis_title="",
-        font=dict(family="Inter", size=11),
-        height=300,
-        margin=dict(l=10, r=40, t=40, b=10),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(gridcolor='#E8E6FF'),
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-with col3:
-    # Avg citations bubble
-    fig_scatter = go.Figure(go.Scatter(
-        x=cluster_years if any(cluster_years) else list(range(len(cluster_names))),
-        y=cluster_cites,
-        mode='markers+text',
-        marker=dict(
-            size=[max(14, c * 4) for c in cluster_counts],
-            color=COLORS[:len(cluster_names)],
-            opacity=0.85,
-        ),
-        text=cluster_names,
-        textposition='top center',
-        textfont=dict(size=9),
-    ))
-    fig_scatter.update_layout(
-        title="Citations by Year (size=papers)",
-        xaxis_title="Avg Year",
-        yaxis_title="Avg Citations",
-        font=dict(family="Inter", size=11),
-        height=300,
-        margin=dict(l=10, r=10, t=40, b=10),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(gridcolor='#E8E6FF'),
-        yaxis=dict(gridcolor='#E8E6FF'),
-    )
-    st.plotly_chart(fig_scatter, use_container_width=True)
-  
+            with col3:
+                # Avg citations bubble
+                fig_scatter = go.Figure(go.Scatter(
+                    x=cluster_years if any(cluster_years) else list(range(len(cluster_names))),
+                    y=cluster_cites,
+                    mode='markers+text',
+                    marker=dict(
+                        size=[max(14, c * 4) for c in cluster_counts],
+                        color=COLORS[:len(cluster_names)],
+                        opacity=0.85,
+                    ),
+                    text=cluster_names,
+                    textposition='top center',
+                    textfont=dict(size=9),
+                ))
+                fig_scatter.update_layout(
+                    title="Citations by Year (size=papers)",
+                    xaxis_title="Avg Year",
+                    yaxis_title="Avg Citations",
+                    font=dict(family="Inter", size=11),
+                    height=300,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(gridcolor='#E8E6FF'),
+                    yaxis=dict(gridcolor='#E8E6FF'),
+                )
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            
 
 
-            # Cluster cards
-            st.markdown("### Research Themes")
-            for i, (cid, info) in enumerate(clusters.items()):
-                cp          = info.get('papers', [])
-                n_extracted = len([p for p in cp if p.get('extracted_content')])
-                years       = [int(p['year']) for p in cp if str(p.get('year','')).isdigit()]
-                yr_range    = f"{min(years)}–{max(years)}" if years else "–"
-                color       = COLORS[i % len(COLORS)]
+                        # Cluster cards
+                        st.markdown("### Research Themes")
+                        for i, (cid, info) in enumerate(clusters.items()):
+                            cp          = info.get('papers', [])
+                            n_extracted = len([p for p in cp if p.get('extracted_content')])
+                            years       = [int(p['year']) for p in cp if str(p.get('year','')).isdigit()]
+                            yr_range    = f"{min(years)}–{max(years)}" if years else "–"
+                            color       = COLORS[i % len(COLORS)]
 
-                st.markdown(f"""
-                <div class="cluster-card" style="border-left:4px solid {color};">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                        <div style="width:10px;height:10px;border-radius:50%;
-                                    background:{color};flex-shrink:0;"></div>
-                        <div style="font-size:15px;font-weight:600;color:#1A1744;">
-                            {info.get('name', f'Cluster {int(cid)+1}')}
+                            st.markdown(f"""
+                            <div class="cluster-card" style="border-left:4px solid {color};">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                                    <div style="width:10px;height:10px;border-radius:50%;
+                                                background:{color};flex-shrink:0;"></div>
+                                    <div style="font-size:15px;font-weight:600;color:#1A1744;">
+                                        {info.get('name', f'Cluster {int(cid)+1}')}
+                                    </div>
+                                </div>
+                                <p style="color:#64748b;font-size:13px;margin-bottom:12px;">
+                                    {info.get('description', '')[:120]}
+                                </p>
+                                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                                    <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                                        border-radius:6px;font-size:12px;font-weight:500;">
+                                        {len(cp)} papers
+                                    </span>
+                                    <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                                        border-radius:6px;font-size:12px;font-weight:500;">
+                                        {n_extracted} full-text
+                                    </span>
+                                    <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                                        border-radius:6px;font-size:12px;font-weight:500;">
+                                        ⌀ {info.get('avg_citations', 0)} citations
+                                    </span>
+                                    <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
+                                        border-radius:6px;font-size:12px;font-weight:500;">
+                                        {yr_range}
+                                    </span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("Run a search to see the research landscape dashboard.")
+
+                # ── TAB 2: PAPERS & SUMMARIES ─────────────────────────────────────
+                with tab2:
+                    st.markdown("### Papers & Summaries")
+
+                    # ── Filter controls ───────────────────────────────────────────
+                    # Uses reset_count in widget keys so resetting forces fresh widgets
+                    reset_n = st.session_state.get('filter_reset_count', 0)
+
+                    all_labels   = sorted(set(p.get('paper_label', '') for p in papers_data if p.get('paper_label')))
+                    all_clusters = {}
+                    for cid, info in clusters.items():
+                        for p in info.get('papers', []):
+                            all_clusters[p.get('title', '')] = info.get('name', f'Cluster {int(cid)+1}')
+
+                    label_options   = ['All'] + all_labels        
+                    cluster_options = ['All'] + sorted(set(all_clusters.values()))
+                    
+
+                    fc1, fc2, fc3 = st.columns([2, 2, 1])
+                    with fc1:
+                        sel_label = st.selectbox(
+                            "Filter by type", label_options,
+                            key=f"filter_label_{reset_n}",
+                            help="Foundational = highly cited older work · Current = recent & cited · Emerging = newest"
+                        )
+                    with fc2:
+                        sel_cluster = st.selectbox(
+                            "Filter by research theme", cluster_options,
+                            key=f"filter_cluster_{reset_n}",
+                        )
+                    with fc3:
+                        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                        if st.button("↺ Reset", use_container_width=True):
+                        st.session_state['filter_reset_count'] = reset_n + 1
+                        st.rerun()
+
+                    # Apply filters
+                    filtered = papers_data
+                    if sel_label != 'All':
+                        filtered = [p for p in filtered if p.get('paper_label') == sel_label]
+                    if sel_cluster != 'All':
+                        filtered = [p for p in filtered
+                                    if all_clusters.get(p.get('title', '')) == sel_cluster]
+
+                    if sel_label != 'All' or sel_cluster != 'All':
+                        st.caption(f"Showing {len(filtered)} of {len(papers_data)} papers after filters")
+
+                    if not filtered:
+                        st.info("No papers match the selected filters. Try adjusting or resetting them.")
+                    else:
+                        # Pagination
+                        ITEMS_PER_PAGE = 10
+                        total_pages = max(1, (len(filtered) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+                        if st.session_state.current_page > total_pages:
+                            st.session_state.current_page = 1
+
+                        st.markdown(
+                            f"<div style='color:#64748b;margin-bottom:15px;font-size:0.95rem;'>"
+                            f"Page <strong>{st.session_state.current_page}</strong> of "
+                            f"<strong>{total_pages}</strong> "
+                            f"<span style='color:#94a3b8;'>({len(filtered)} papers)</span></div>",
+                            unsafe_allow_html=True
+                        )
+
+                        start = (st.session_state.current_page - 1) * ITEMS_PER_PAGE
+                        for i, paper in enumerate(filtered[start:start + ITEMS_PER_PAGE]):
+                            render_paper_ui(paper, idx=start + i)
+
+                        st.markdown("---")
+                        p1, p2, p3 = st.columns([1, 3, 1])
+                        with p1:
+                            if st.button("← Prev", disabled=(st.session_state.current_page == 1),
+                                        use_container_width=True, key="prev_btn"):
+                                st.session_state.current_page -= 1
+                                st.rerun()
+                        with p2:
+                            st.markdown(
+                                f"<div style='text-align:center;padding-top:8px;color:#64748b;font-weight:500;'>"
+                                f"Page {st.session_state.current_page} / {total_pages}</div>",
+                                unsafe_allow_html=True
+                            )
+                        with p3:
+                            if st.button("Next →", disabled=(st.session_state.current_page == total_pages),
+                                        use_container_width=True, key="next_btn"):
+                                st.session_state.current_page += 1
+                                st.rerun()
+
+                # ── TAB 3: SAVED PAPERS ───────────────────────────────────────────
+                with tab3:
+                    st.markdown("### 📚 Saved Papers")
+                    saved = st.session_state.get('saved_papers_session', [])
+
+                    if not saved:
+                        st.markdown("""
+                        <div style="text-align:center;padding:40px 20px;color:#9B97C4;">
+                            <div style="font-size:32px;margin-bottom:12px;">🔖</div>
+                            <div style="font-size:16px;font-weight:500;margin-bottom:6px;">No saved papers yet</div>
+                            <div style="font-size:13px;">
+                                Click the <strong>🔖 Save</strong> button inside any paper card to add it here.
+                            </div>
                         </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"**{len(saved)} saved paper{'s' if len(saved) != 1 else ''}**")
+
+                        # Bulk export saved papers
+                        if len(saved) > 0:
+                            saved_bib = generate_bibtex(saved)
+                            st.download_button(
+                                "📥 Download Saved Papers as BibTeX",
+                                data=saved_bib,
+                                file_name="saved_papers.bib",
+                                mime="text/plain",
+                                use_container_width=False,
+                            )
+
+                        st.markdown("---")
+                        # Render each saved paper
+                        for i, paper in enumerate(saved):
+                            render_saved_paper_card(paper, idx=i)
+
+                # ── TAB 4: EXPORT & RESTRICTED ────────────────────────────────────
+                with tab4:
+                    st.markdown("### 📤 Export")
+
+                    ecol1, ecol2 = st.columns(2, gap="large")
+
+                    with ecol1:
+                        st.markdown("""
+                        <div style="background:white;border:1px solid #E8E6FF;border-radius:14px;
+                                    padding:20px;margin-bottom:12px;">
+                            <div style="font-size:16px;font-weight:600;color:#1A1744;margin-bottom:6px;">
+                                📊 Excel Spreadsheet
+                            </div>
+                            <div style="font-size:13px;color:#64748b;margin-bottom:14px;">
+                                All papers organised by cluster, with metadata, abstracts,
+                                relevance scores, and a cluster summary sheet.
+                                Colour-coded by theme. Ready for review or sharing.
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        try:
+                            excel_bytes = export_to_excel(
+                                papers_data, clusters,
+                                st.session_state.get('last_query', 'research')
+                            )
+                            st.download_button(
+                                "📥 Download Excel (.xlsx)",
+                                data=excel_bytes,
+                                file_name="research_papers.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                type="primary",
+                            )
+                        except Exception as e:
+                            st.error(f"Could not generate Excel: {e}")
+
+                    with ecol2:
+                        st.markdown("""
+                        <div style="background:white;border:1px solid #E8E6FF;border-radius:14px;
+                                    padding:20px;margin-bottom:12px;">
+                            <div style="font-size:16px;font-weight:600;color:#1A1744;margin-bottom:6px;">
+                                📝 BibTeX Reference File
+                            </div>
+                            <div style="font-size:13px;color:#64748b;margin-bottom:14px;">
+                                All papers as a <code>.bib</code> file — import directly into
+                                Overleaf, Zotero, Mendeley, or any LaTeX project.
+                                One citation key per paper, auto-deduplicated.
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        try:
+                            bibtex_str = generate_bibtex(papers_data)
+                            st.download_button(
+                                "📥 Download BibTeX (.bib)",
+                                data=bibtex_str,
+                                file_name="research_papers.bib",
+                                mime="text/plain",
+                                use_container_width=True,
+                                type="primary",
+                            )
+                        except Exception as e:
+                            st.error(f"Could not generate BibTeX: {e}")
+
+                    st.markdown("---")
+                    st.markdown("### 🔒 Restricted Papers")
+                    st.markdown("""
+                    <div class="warning-box">
+                        These papers were found but require a subscription or institutional access.
+                        Citations are still available — you can look them up via your library.
                     </div>
-                    <p style="color:#64748b;font-size:13px;margin-bottom:12px;">
-                        {info.get('description', '')[:120]}
-                    </p>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
-                            border-radius:6px;font-size:12px;font-weight:500;">
-                            {len(cp)} papers
-                        </span>
-                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
-                            border-radius:6px;font-size:12px;font-weight:500;">
-                            {n_extracted} full-text
-                        </span>
-                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
-                            border-radius:6px;font-size:12px;font-weight:500;">
-                            ⌀ {info.get('avg_citations', 0)} citations
-                        </span>
-                        <span style="background:#F1EFFE;color:#5B4EE8;padding:4px 10px;
-                            border-radius:6px;font-size:12px;font-weight:500;">
-                            {yr_range}
-                        </span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("Run a search to see the research landscape dashboard.")
+                    """, unsafe_allow_html=True)
 
-    # ── TAB 2: PAPERS & SUMMARIES ─────────────────────────────────────
-    with tab2:
-        st.markdown("### Papers & Summaries")
+                    if not restricted:
+                        st.markdown("""
+                        <div class="success-box">
+                            ✅ All found papers were accessible — nothing is restricted.
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"**{len(restricted)} restricted papers**")
+                        for paper in restricted:
+                            render_suggested_paper(paper)
 
-        # ── Filter controls ───────────────────────────────────────────
-        # Uses reset_count in widget keys so resetting forces fresh widgets
-        reset_n = st.session_state.get('filter_reset_count', 0)
-
-        all_labels   = sorted(set(p.get('paper_label', '') for p in papers_data if p.get('paper_label')))
-        all_clusters = {}
-        for cid, info in clusters.items():
-            for p in info.get('papers', []):
-                all_clusters[p.get('title', '')] = info.get('name', f'Cluster {int(cid)+1}')
-
-        label_options   = ['All'] + all_labels        
-        cluster_options = ['All'] + sorted(set(all_clusters.values()))
-        
-
-        fc1, fc2, fc3 = st.columns([2, 2, 1])
-        with fc1:
-            sel_label = st.selectbox(
-                "Filter by type", label_options,
-                key=f"filter_label_{reset_n}",
-                help="Foundational = highly cited older work · Current = recent & cited · Emerging = newest"
-            )
-        with fc2:
-            sel_cluster = st.selectbox(
-                "Filter by research theme", cluster_options,
-                key=f"filter_cluster_{reset_n}",
-            )
-        with fc3:
-            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-            if st.button("↺ Reset", use_container_width=True):
-              st.session_state['filter_reset_count'] = reset_n + 1
-              st.rerun()
-
-        # Apply filters
-        filtered = papers_data
-        if sel_label != 'All':
-            filtered = [p for p in filtered if p.get('paper_label') == sel_label]
-        if sel_cluster != 'All':
-            filtered = [p for p in filtered
-                        if all_clusters.get(p.get('title', '')) == sel_cluster]
-
-        if sel_label != 'All' or sel_cluster != 'All':
-            st.caption(f"Showing {len(filtered)} of {len(papers_data)} papers after filters")
-
-        if not filtered:
-            st.info("No papers match the selected filters. Try adjusting or resetting them.")
-        else:
-            # Pagination
-            ITEMS_PER_PAGE = 10
-            total_pages = max(1, (len(filtered) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
-            if st.session_state.current_page > total_pages:
-                st.session_state.current_page = 1
-
-            st.markdown(
-                f"<div style='color:#64748b;margin-bottom:15px;font-size:0.95rem;'>"
-                f"Page <strong>{st.session_state.current_page}</strong> of "
-                f"<strong>{total_pages}</strong> "
-                f"<span style='color:#94a3b8;'>({len(filtered)} papers)</span></div>",
-                unsafe_allow_html=True
-            )
-
-            start = (st.session_state.current_page - 1) * ITEMS_PER_PAGE
-            for i, paper in enumerate(filtered[start:start + ITEMS_PER_PAGE]):
-                render_paper_ui(paper, idx=start + i)
-
-            st.markdown("---")
-            p1, p2, p3 = st.columns([1, 3, 1])
-            with p1:
-                if st.button("← Prev", disabled=(st.session_state.current_page == 1),
-                             use_container_width=True, key="prev_btn"):
-                    st.session_state.current_page -= 1
-                    st.rerun()
-            with p2:
-                st.markdown(
-                    f"<div style='text-align:center;padding-top:8px;color:#64748b;font-weight:500;'>"
-                    f"Page {st.session_state.current_page} / {total_pages}</div>",
-                    unsafe_allow_html=True
-                )
-            with p3:
-                if st.button("Next →", disabled=(st.session_state.current_page == total_pages),
-                             use_container_width=True, key="next_btn"):
-                    st.session_state.current_page += 1
-                    st.rerun()
-
-    # ── TAB 3: SAVED PAPERS ───────────────────────────────────────────
-    with tab3:
-        st.markdown("### 📚 Saved Papers")
-        saved = st.session_state.get('saved_papers_session', [])
-
-        if not saved:
-            st.markdown("""
-            <div style="text-align:center;padding:40px 20px;color:#9B97C4;">
-                <div style="font-size:32px;margin-bottom:12px;">🔖</div>
-                <div style="font-size:16px;font-weight:500;margin-bottom:6px;">No saved papers yet</div>
-                <div style="font-size:13px;">
-                    Click the <strong>🔖 Save</strong> button inside any paper card to add it here.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"**{len(saved)} saved paper{'s' if len(saved) != 1 else ''}**")
-
-            # Bulk export saved papers
-            if len(saved) > 0:
-                saved_bib = generate_bibtex(saved)
-                st.download_button(
-                    "📥 Download Saved Papers as BibTeX",
-                    data=saved_bib,
-                    file_name="saved_papers.bib",
-                    mime="text/plain",
-                    use_container_width=False,
-                )
-
-            st.markdown("---")
-            # Render each saved paper
-            for i, paper in enumerate(saved):
-                render_saved_paper_card(paper, idx=i)
-
-    # ── TAB 4: EXPORT & RESTRICTED ────────────────────────────────────
-    with tab4:
-        st.markdown("### 📤 Export")
-
-        ecol1, ecol2 = st.columns(2, gap="large")
-
-        with ecol1:
-            st.markdown("""
-            <div style="background:white;border:1px solid #E8E6FF;border-radius:14px;
-                        padding:20px;margin-bottom:12px;">
-                <div style="font-size:16px;font-weight:600;color:#1A1744;margin-bottom:6px;">
-                    📊 Excel Spreadsheet
-                </div>
-                <div style="font-size:13px;color:#64748b;margin-bottom:14px;">
-                    All papers organised by cluster, with metadata, abstracts,
-                    relevance scores, and a cluster summary sheet.
-                    Colour-coded by theme. Ready for review or sharing.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            try:
-                excel_bytes = export_to_excel(
-                    papers_data, clusters,
-                    st.session_state.get('last_query', 'research')
-                )
-                st.download_button(
-                    "📥 Download Excel (.xlsx)",
-                    data=excel_bytes,
-                    file_name="research_papers.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    type="primary",
-                )
-            except Exception as e:
-                st.error(f"Could not generate Excel: {e}")
-
-        with ecol2:
-            st.markdown("""
-            <div style="background:white;border:1px solid #E8E6FF;border-radius:14px;
-                        padding:20px;margin-bottom:12px;">
-                <div style="font-size:16px;font-weight:600;color:#1A1744;margin-bottom:6px;">
-                    📝 BibTeX Reference File
-                </div>
-                <div style="font-size:13px;color:#64748b;margin-bottom:14px;">
-                    All papers as a <code>.bib</code> file — import directly into
-                    Overleaf, Zotero, Mendeley, or any LaTeX project.
-                    One citation key per paper, auto-deduplicated.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            try:
-                bibtex_str = generate_bibtex(papers_data)
-                st.download_button(
-                    "📥 Download BibTeX (.bib)",
-                    data=bibtex_str,
-                    file_name="research_papers.bib",
-                    mime="text/plain",
-                    use_container_width=True,
-                    type="primary",
-                )
-            except Exception as e:
-                st.error(f"Could not generate BibTeX: {e}")
-
-        st.markdown("---")
-        st.markdown("### 🔒 Restricted Papers")
-        st.markdown("""
-        <div class="warning-box">
-            These papers were found but require a subscription or institutional access.
-            Citations are still available — you can look them up via your library.
-        </div>
-        """, unsafe_allow_html=True)
-
-        if not restricted:
-            st.markdown("""
-            <div class="success-box">
-                ✅ All found papers were accessible — nothing is restricted.
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"**{len(restricted)} restricted papers**")
-            for paper in restricted:
-                render_suggested_paper(paper)
 
 else:
     render_welcome_screen()
