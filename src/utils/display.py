@@ -331,9 +331,26 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
 
     # ── Tab 1: Summary ────────────────────────────────────────────────
     with t1:
-        has_llm = any([problem, objective, method, findings, implications, limitations])
+        summary_para = summary.get("Summary", "").strip()
+        has_llm = any([summary_para, problem, objective, method, findings, implications, limitations])
 
         if has_llm:
+            # Show the rich summary paragraph first if available (new schema)
+            if summary_para:
+                st.markdown("""<div style="background:#F8F7FF;border-left:3px solid #5B4EE8;
+                    border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:16px;
+                    line-height:1.7;color:#1A1744;font-size:14px;">""",
+                    unsafe_allow_html=True)
+                st.write(summary_para)
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Then findings
+            if findings:
+                with st.container(border=True):
+                    st.markdown("**💡 Key Findings**")
+                    for f in findings[:4]:
+                        st.markdown(f"- {f}")
+
             # Row 1: Problem + Objective side by side
             if problem or objective:
                 col_a, col_b = st.columns(2, gap="medium")
