@@ -107,7 +107,7 @@ class IntelligentPaperAccessor:
             try:
                 content = self.try_extract_content(url, method_name)
                 if content and len(content) > 200:
-                    extracted_content = content[:3000]
+                    extracted_content = content[:8000]
                     working_url       = url
                     access_type       = method_name
                     break
