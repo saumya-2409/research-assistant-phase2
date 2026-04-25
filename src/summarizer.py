@@ -560,7 +560,7 @@ class FullPaperSummarizer:
                 return s
         
         # ── Priority 2: Download PDF if url available and no content yet ──
-         if use_full_text and PYPDF2_AVAILABLE:
+        if use_full_text and PYPDF2_AVAILABLE:
             pdf_url = paper.get('pdf_url') or paper.get('url', '')
             # Only attempt if URL looks like a direct PDF (not a landing page)
             is_direct_pdf = (
