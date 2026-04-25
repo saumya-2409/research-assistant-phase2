@@ -202,25 +202,55 @@ def _fill_schema(parsed: Dict[str, Any]) -> Dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────
 
 def _extractive_summary(paper: Dict[str, Any]) -> Dict[str, Any]:
-    """Returns first 3 sentences of abstract as minimal summary."""
+    """
+    Extracts distinct content for each field from the abstract.
+    Problem = first 1-2 sentences (context/gap).
+    Findings = last 2 sentences (typically results/conclusions).
+    Never uses the same sentences for both.
+    """
     abstract  = paper.get("abstract", "").strip()
-    sentences = re.split(r'(?<=[.!?])\s+', abstract)
-    snippet   = " ".join(sentences[:3]) if sentences else abstract[:300]
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', abstract) if s.strip()]
 
-    # Build a basic lit review paragraph from available metadata
+    # Problem statement: first 1-2 sentences (sets up the gap)
+    problem_sentences = sentences[:2] if len(sentences) >= 2 else sentences[:1]
+    problem = " ".join(problem_sentences)
+
+    # Findings: last 2 sentences (typically results/conclusion)
+    # If abstract is short, use middle sentence(s) to avoid overlap
+    if len(sentences) >= 4:
+        finding_sentences = sentences[-2:]
+    elif len(sentences) == 3:
+        finding_sentences = [sentences[2]]
+    elif len(sentences) == 2:
+        finding_sentences = [sentences[1]]
+    else:
+        finding_sentences = []
+
+    findings = [s for s in finding_sentences if s and s not in problem_sentences]
+
+    # If we couldn't separate them, make it explicit
+    if not findings:
+        findings = ["See abstract for details — LLM summary unavailable for this paper."]
+
+    # Objective: middle sentence if available
+    objective = sentences[len(sentences)//2] if len(sentences) >= 3 else ""
+
+    # Literature review paragraph
     authors  = paper.get("authors", [])
     year     = paper.get("year", "")
     first_au = authors[0].split()[-1] if authors else "Authors"
     et_al    = " et al." if len(authors) > 1 else ""
     lit_para = (
-        f"{first_au}{et_al} ({year}) {snippet}"
-        if year else snippet
+        f"{first_au}{et_al} ({year}) {problem} "
+        f"{' '.join(finding_sentences)}"
+        if year else abstract[:400]
     )
 
     return _fill_schema({
         "Title":                      paper.get("title", ""),
-        "Research_Problem":           snippet,
-        "Key_Findings":               [s for s in sentences[1:3] if s],
+        "Research_Problem":           problem,
+        "Research_Objective":         objective,
+        "Key_Findings":               findings,
         "Literature_Review_Paragraph": lit_para,
         "Key_Metrics":                [],
     })
@@ -518,15 +548,36 @@ class FullPaperSummarizer:
             "doi":      paper.get("doi", ""),
         }
 
-        # Try full text
-        if use_full_text and PYPDF2_AVAILABLE and paper.get('pdf_url'):
-            extracted, _ = self._download_and_extract_pdf(paper['pdf_url'])
-            if extracted:
-                s = self._call_and_parse(extracted, meta, query, "Full Text")
-                if s:
-                    s.update({'accessibility': 'accessible',
-                               'abstract_summary_status': 'generated_from_fulltext'})
-                    return s
+        # ── Priority 1: Use already-extracted content from fetcher ────
+        # fetchers.py stores extracted text in paper['extracted_content']
+        # This is the primary full-text path — no PDF download needed
+        existing_text = paper.get('extracted_content', '') or ''
+        if use_full_text and existing_text.strip() and len(existing_text.strip()) > 200:
+            s = self._call_and_parse(existing_text, meta, query, "Full Text")
+            if s:
+                s.update({'accessibility': 'accessible',
+                           'abstract_summary_status': 'generated_from_fulltext'})
+                return s
+        
+        # ── Priority 2: Download PDF if url available and no content yet ──
+         if use_full_text and PYPDF2_AVAILABLE:
+            pdf_url = paper.get('pdf_url') or paper.get('url', '')
+            # Only attempt if URL looks like a direct PDF (not a landing page)
+            is_direct_pdf = (
+                pdf_url and (
+                    pdf_url.endswith('.pdf') or
+                    'arxiv.org/pdf' in pdf_url or
+                    'pdf' in pdf_url.lower()
+                )
+            )
+            if is_direct_pdf:
+                extracted, paywalled = self._download_and_extract_pdf(pdf_url)
+                if extracted and len(extracted.strip()) > 200:
+                    s = self._call_and_parse(extracted, meta, query, "Full Text")
+                    if s:
+                        s.update({'accessibility': 'accessible',
+                                   'abstract_summary_status': 'generated_from_fulltext'})
+                        return s
 
         # Abstract
         abstract = meta.get('abstract', '')
@@ -538,6 +589,15 @@ class FullPaperSummarizer:
                 return s
 
         # Extractive fallback
+        title_short = meta.get('title', '')[:40]
+        has_content = bool(paper.get('extracted_content', ''))
+        has_pdf_url = bool(paper.get('pdf_url'))
+        logger.info(
+            f"[Summarizer] EXTRACTIVE FALLBACK: '{title_short}' | "
+            f"extracted_content={'YES' if has_content else 'NO'} | "
+            f"pdf_url={'YES' if has_pdf_url else 'NO'} | "
+            f"abstract_len={len(meta.get('abstract',''))}"
+        )
         result = _extractive_summary(paper)
         result.update({'accessibility': 'accessible',
                        'abstract_summary_status': 'extractive_fallback'})
