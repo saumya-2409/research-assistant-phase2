@@ -517,13 +517,13 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
     btn_label   = "📥 Download PDF" if access_type == "direct_pdf" else "🔗 Open Paper"
     if working_url:
         with btn_cols[0]:
-            st.link_button(btn_label, working_url, use_container_width=True)
+            st.link_button(btn_label, working_url, width='stretch')
     if pdf_url and pdf_url != working_url:
         with btn_cols[1]:
-            st.link_button("📄 Direct PDF", pdf_url, use_container_width=True)
+            st.link_button("📄 Direct PDF", pdf_url, width='stretch')
     with btn_cols[2]:
         save_key = f"save_btn_{idx}_{hash(paper.get('title',''))%99991}"
-        if st.button("🔖 Save", key=save_key, use_container_width=True):
+        if st.button("🔖 Save", key=save_key, width='stretch'):
             if 'saved_papers_session' not in st.session_state:
                 st.session_state.saved_papers_session = []
             # Avoid duplicates
@@ -642,9 +642,9 @@ def render_saved_paper_card(paper: dict, idx: int = 0):
                          label_visibility="collapsed")
         with col2:
             if url:
-                st.link_button("🔗 Open", url, use_container_width=True)
+                st.link_button("🔗 Open", url, width='stretch')
             remove_key = f"remove_saved_{idx}_{hash(title)%99991}"
-            if st.button("🗑️ Remove", key=remove_key, use_container_width=True):
+            if st.button("🗑️ Remove", key=remove_key, width='stretch'):
                 st.session_state.saved_papers_session.pop(idx)
                 st.rerun()
 
