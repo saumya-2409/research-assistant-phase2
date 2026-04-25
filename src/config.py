@@ -195,7 +195,7 @@ SUMMARISATION = {
     # Key:    aistudio.google.com → Get API key (free, no card needed)
     "gemini": {
         "api_key":    None,          # set GEMINI_API_KEY in .env
-        "model":      "gemma-3-12b-it",
+        "model":      "gemini-1.5-flash",
         "max_tokens": 4000,
         "temperature": 0.1,
     },
