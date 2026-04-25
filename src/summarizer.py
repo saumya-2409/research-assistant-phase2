@@ -46,10 +46,49 @@ try:
 except ImportError:
     GroqRateLimitError = Exception
 
-MAX_CONTEXT_CHARS = 3000
+MAX_CONTEXT_CHARS = 6000
 BATCH_SIZE        = 5      # papers per LLM call
 FULL_LLM_LIMIT    = 20     # top N papers get LLM summaries; rest get extractive
 
+
+def _prepare_text_for_prompt(full_text: str, abstract: str) -> str:
+    """
+    Instead of naively truncating to first N chars (which only sends
+    the introduction), this sends:
+      - For short texts: everything
+      - For long PDFs: first 55% (intro+methods) + last 35% (results+conclusion)
+    This gives the LLM the information it needs to populate ALL summary fields.
+    """
+    source = full_text.strip() if full_text and full_text.strip() else (abstract or "")
+    if not source:
+        return ""
+
+    if len(source) <= MAX_CONTEXT_CHARS:
+        return source
+
+    head_chars = int(MAX_CONTEXT_CHARS * 0.55)
+    tail_chars = int(MAX_CONTEXT_CHARS * 0.35)
+
+    head = source[:head_chars]
+
+    # Find results/conclusion in the latter half of the document
+    search_from = max(len(source) // 2, head_chars)
+    tail_raw    = source[search_from:]
+
+    # Try to start at a meaningful section heading
+    for marker in ['conclusion', 'result', 'discussion', 'finding']:
+        idx = tail_raw.lower().find(marker)
+        if 0 < idx < len(tail_raw) // 2:
+            tail_raw = tail_raw[idx:]
+            break
+
+    tail = tail_raw[-tail_chars:] if len(tail_raw) > tail_chars else tail_raw
+    # Start tail at a sentence boundary
+    period_idx = tail.find('. ')
+    if 0 < period_idx < 150:
+        tail = tail[period_idx + 2:]
+
+    return head + "\n\n[...middle omitted...]\n\n" + tail
 
 # ─────────────────────────────────────────────────────────────────────
 # JSON HELPERS
@@ -62,7 +101,6 @@ def _try_fix_json(s: str) -> str:
     s = re.sub(r'^[^\{]*\{', '{', s, count=1)
     s = re.sub(r',(\s*[\}\]])', r'\1', s)
     return s
-
 
 def _parse_json(raw: str) -> Optional[Dict[str, Any]]:
     if not raw:
@@ -81,7 +119,6 @@ def _parse_json(raw: str) -> Optional[Dict[str, Any]]:
             except json.JSONDecodeError:
                 pass
     return None
-
 
 def _parse_json_array(raw: str) -> Optional[List[Dict]]:
     """Parse a JSON array from raw LLM output."""
@@ -106,29 +143,59 @@ def _parse_json_array(raw: str) -> Optional[List[Dict]]:
             pass
     return None
 
-
 def _fill_schema(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(parsed,dict):
+        return {}
     out = {}
-    for k in ["Title", "Research_Problem", "Research_Objective",
-              "Aim_of_Study", "limitations_and_future_work"]:
-        val    = parsed.get(k) if isinstance(parsed, dict) else None
-        out[k] = val if isinstance(val, str) and val.strip() else ""
-    for k in ["Keywords", "Key_Findings"]:
-        val    = parsed.get(k) if isinstance(parsed, dict) else None
-        out[k] = [str(x) for x in val] if isinstance(val, list) else []
-    mma = parsed.get("Methodology_Approach") if isinstance(parsed, dict) else None
-    out["Methodology_Approach"] = {}
-    for sk in ["Method", "Process", "Data_Handling", "Results_Format"]:
-        sv = mma.get(sk) if isinstance(mma, dict) else None
-        out["Methodology_Approach"][sk] = sv if isinstance(sv, str) and sv.strip() else ""
-    # Literature review paragraph — new field
-    lit = parsed.get("Literature_Review_Paragraph") if isinstance(parsed, dict) else None
-    out["Literature_Review_Paragraph"] = lit if isinstance(lit, str) and lit.strip() else ""
-    # Key metrics extracted from paper
-    metrics = parsed.get("Key_Metrics") if isinstance(parsed, dict) else None
-    out["Key_Metrics"] = [str(x) for x in metrics] if isinstance(metrics, list) else []
-    return out
 
+    # ── Scalar string fields ──────────────────────────────────────────
+    for k in ["Title", "Research_Problem", "Research_Objective",
+              "Aim_of_Study", "limitations_and_future_work", "Literature_Review_Paragraph"]:
+        val = parsed.get(k) 
+        if isinstance(val, str) and val.strip() and val.strip().lower() not in (
+                'null', 'none', 'n/a', 'not specified', 'not specified in paper'):
+            out[k] = val.strip()
+        else :
+            out[k] = ""
+    
+    # ── List fields — handle when LLM returns a string instead of array ──
+    for k in ["Keywords", "Key_Findings", "Key_Metrics"]:
+        val    = parsed.get(k) 
+        if isinstance(val, list):
+            # Filter empty/null entries
+            out[k] = [str(x).strip() for x in val
+                      if x and str(x).strip() and str(x).strip().lower() != 'null']
+        elif isinstance(val, str) and val.strip():
+            # LLM returned comma/semicolon/newline separated string — split it
+            parts = re.split(r'\n\s*[-•]\s*|\n\d+\.\s*|;\s*', val)
+            out[k] = [p.strip() for p in parts if p.strip() and len(p.strip()) > 3]
+            if not out[k]:
+                # Last resort: treat whole string as single-item list
+                out[k] = [val.strip()]
+        else:
+            out[k] = []
+
+    # ── Methodology — handle plain string collapse ────────────────────
+    mma = parsed.get("Methodology_Approach") 
+    if isinstance(mma, str) and mma.strip():
+        # LLM collapsed the whole dict into a string
+        out["Methodology_Approach"] = {
+            "Method": mma.strip(), "Process": "",
+            "Data_Handling": "", "Results_Format": ""
+        }
+    elif isinstance(mma, dict):
+        out["Methodology_Approach"] = {}
+        for sk in ["Method", "Process", "Data_Handling", "Results_Format"]:
+            sv = mma.get(sk)
+            out["Methodology_Approach"][sk] = (
+                sv.strip() if isinstance(sv, str) and sv.strip() else ""
+            )
+    else:
+        out["Methodology_Approach"] = {
+            "Method": "", "Process": "", "Data_Handling": "", "Results_Format": ""
+        }
+
+    return out
 
 # ─────────────────────────────────────────────────────────────────────
 # EXTRACTIVE FALLBACK
@@ -157,7 +224,6 @@ def _extractive_summary(paper: Dict[str, Any]) -> Dict[str, Any]:
         "Literature_Review_Paragraph": lit_para,
         "Key_Metrics":                [],
     })
-
 
 # ─────────────────────────────────────────────────────────────────────
 # MAIN SUMMARISER CLASS
@@ -249,7 +315,6 @@ class FullPaperSummarizer:
             self.client = None
 
     # ── Raw LLM call ─────────────────────────────────────────────────
-
     def _llm_call(self, prompt: str) -> str:
         if not self.client:
             return ""
@@ -350,10 +415,22 @@ class FullPaperSummarizer:
 
             elif self.provider == "gemini":
                 time.sleep(2)   # stay under 30 RPM
-                resp = self.client.generate_content(
-                    f"Output strictly valid JSON only. No markdown.\n\n{prompt}"
-                )
-                return resp.text.strip()
+                for _attempt in range(3):
+                    try:
+                        resp = self.client.generate_content(
+                            f"Output strictly valid JSON only. No markdown fences. "
+                            f"Start your response with {{ and end with }}.\n\n{prompt}"
+                        )
+                        return resp.text.strip()
+                    except Exception as _ge:
+                        _msg = str(_ge)
+                        if "429" in _msg or "quota" in _msg.lower() or "rate" in _msg.lower():
+                            _wait = 20 * (_attempt + 1)
+                            logger.warning(f"[gemini] Rate limited — waiting {_wait}s")
+                            time.sleep(_wait)
+                        else:
+                            raise
+                return ""
 
         except GroqRateLimitError as e:
             wait = 5.0
@@ -371,43 +448,60 @@ class FullPaperSummarizer:
         return ""
 
     # ── Single paper summary ─────────────────────────────────────────
-
     def _build_prompt(self, text: str, meta: Dict, query: str, label: str) -> str:
-        return f"""Analyse this academic paper and return a JSON summary.
+        title    = meta.get('title', 'Unknown')
+        authors  = ', '.join((meta.get('authors') or [])[:3])
+        year     = meta.get('year', '')
+        abstract = meta.get('abstract', '')
+        
+        # For full text: prepend abstract explicitly so it's never truncated away
+        if label == "Full Text" and abstract:
+            prepared = (
+                f"ABSTRACT (read carefully):\n{abstract}\n\n"
+                f"FULL PAPER EXCERPT:\n"
+                + _prepare_text_for_prompt(text, abstract)
+            )
+        else:
+            prepared = _prepare_text_for_prompt(text, abstract)
 
-Title: {meta.get('title', 'Unknown')}
-Authors: {', '.join((meta.get('authors') or [])[:3])}
-Year: {meta.get('year', '')}
-Query context: {query}
+        return f"""You are an expert academic research analyst. Read the paper below carefully and extract SPECIFIC, CONCRETE information. Do NOT write generic or templated descriptions — every answer must be grounded in what this paper actually says.
 
-Content ({label}):
-{text[:MAX_CONTEXT_CHARS]}
+            PAPER METADATA:
+            Title: {title}
+            Authors: {authors}
+            Year: {year}
+            User's research query: {query}
 
-Return ONLY this JSON (no other text):
-{{
-    "Title": "paper title",
-    "Keywords": ["keyword1", "keyword2"],
-    "Research_Problem": "what problem this paper solves (2-3 sentences)",
-    "Research_Objective": "main goal",
-    "Methodology_Approach": {{
-        "Method": "technique or algorithm used",
-        "Process": "how it was applied",
-        "Data_Handling": "what data was used and how",
-        "Results_Format": "how results are presented"
-    }},
-    "Aim_of_Study": "practical implications",
-    "Key_Findings": ["finding 1 with any numbers/metrics", "finding 2"],
-    "Key_Metrics": ["accuracy: X%", "dataset: Y", "baseline: Z"],
-    "limitations_and_future_work": "limitations and next steps",
-    "Literature_Review_Paragraph": "A 3-5 sentence paragraph in academic style that can be directly pasted into a literature review. Must include author surnames and year in parentheses citation format. Example: Smith et al. (2020) proposed... Their approach achieves... However, a limitation is..."
-}}"""
+            PAPER CONTENT:
+            ---
+            {prepared}
+            ---
 
-    def summarize_paper(
-        self,
-        paper: Dict[str, Any],
-        use_full_text: bool = True,
-        query: str = ""
-    ) -> Dict[str, Any]:
+            Return ONLY a valid JSON object. No markdown fences. No explanation before or after. Every field is required — use "Not explicitly stated" only if genuinely absent, never leave a field blank or null.
+
+            {{
+                "Title": "{title}",
+                "Keywords": ["specific technical term from paper", "specific technical term", "specific technical term"],
+                "Research_Problem": "2-3 sentences on the SPECIFIC gap or challenge this paper addresses. What existing approach fails, and why? Be concrete — name the actual problem domain.",
+                "Research_Objective": "1-2 sentences: the paper's stated goal or research question, specific to THIS paper, not generic.",
+                "Methodology_Approach": {{
+                    "Method": "The EXACT technique, model, or algorithm (e.g. 'fine-tuned RoBERTa on biomedical NER', not just 'deep learning')",
+                    "Process": "2 sentences: step-by-step experimental workflow — what they did and in what order.",
+                    "Data_Handling": "Name the specific dataset(s), sample sizes if stated, train/test split, and preprocessing done.",
+                    "Results_Format": "How results are reported: e.g. 'F1 score on held-out test set vs 3 baselines in Table 2'"
+                }},
+                "Aim_of_Study": "2 sentences: what real-world problem in what domain does this solve? Give concrete use cases from the paper.",
+                "Key_Findings": [
+                    "Finding 1 with exact numbers if reported — e.g. 'Achieved 91.3% F1, outperforming BERT baseline by 5.2 points'",
+                    "Finding 2 — another concrete, specific result",
+                    "Finding 3 — a notable limitation or unexpected result, if present"
+                ],
+                "Key_Metrics": ["MetricName: value", "DatasetName: N samples", "BaselineName: comparison value"],
+                "limitations_and_future_work": "2 sentences: what the authors explicitly acknowledge as limitations and what future work they suggest.",
+                "Literature_Review_Paragraph": "Write exactly 4-5 sentences in formal third-person academic style for direct insertion into a literature review. STRICT FORMAT — Sentence 1: '[LastName] et al. ({year}) proposed/investigated/developed [specific contribution].' Sentence 2: 'The [methodology] was applied to [specific data/domain].' Sentence 3: 'The study demonstrated [specific result with numbers if available].' Sentence 4: 'This work contributes to [field] by [specific contribution].' Sentence 5: 'However, [specific limitation stated by authors].'"
+            }}"""
+
+    def summarize_paper(self,paper: Dict[str, Any],use_full_text: bool = True,query: str = "") -> Dict[str, Any]:
 
         if not self.client:
             result = _extractive_summary(paper)
@@ -416,10 +510,12 @@ Return ONLY this JSON (no other text):
             return result
 
         meta = {
-            "title":   paper.get("title", "").strip(),
-            "abstract":paper.get("abstract", "").strip(),
-            "authors": paper.get("authors", []),
-            "year":    paper.get("year", ""),
+            "title":    paper.get("title", "").strip(),
+            "abstract": paper.get("abstract", "").strip(),
+            "authors":  paper.get("authors", []),
+            "year":     paper.get("year", ""),
+            "venue":    paper.get("venue", ""),
+            "doi":      paper.get("doi", ""),
         }
 
         # Try full text
@@ -452,14 +548,20 @@ Return ONLY this JSON (no other text):
         if not raw:
             return None
         parsed = _parse_json(raw)
-        if not parsed:
+        if not parsed or not isinstance(parsed, dict):
             return None
-        if not (parsed.get("Research_Problem") or parsed.get("Key_Findings")):
+
+        # Accept if ANY 2 meaningful fields are populated — not just Problem+Findings
+        _check_fields = ["Research_Problem", "Research_Objective", "Key_Findings",
+                         "Aim_of_Study", "Literature_Review_Paragraph",
+                         "Methodology_Approach"]
+        populated = sum(1 for k in _check_fields if parsed.get(k))
+        if populated < 2:
+            logger.warning(f"[Summarizer] LLM returned too few fields ({populated}) — rejecting")
             return None
         return _fill_schema(parsed)
-
+        
     # ── BATCH summarisation (5 papers per call) ──────────────────────
-
     def summarize_batch(self, papers: List[Dict], query: str) -> List[Dict]:
         """
         Summarise up to 5 papers in a single LLM call.
@@ -471,7 +573,7 @@ Return ONLY this JSON (no other text):
 
         papers_text = ""
         for i, p in enumerate(papers, 1):
-            abstract = (p.get('abstract') or '')[:400]
+            abstract = (p.get('abstract') or '')[:800]
             authors  = (p.get('authors') or [])
             au_str   = ", ".join(authors[:2]) + (" et al." if len(authors) > 2 else "")
             papers_text += (
@@ -484,29 +586,29 @@ Return ONLY this JSON (no other text):
 
         prompt = f"""Analyse {len(papers)} academic papers for the query: "{query}"
 
-{papers_text}
+            {papers_text}
 
-Return a JSON ARRAY with exactly {len(papers)} objects in order.
-Each object:
-{{
-  "Title": "paper title",
-  "Keywords": ["k1", "k2"],
-  "Research_Problem": "what problem this paper solves",
-  "Research_Objective": "main goal",
-  "Methodology_Approach": {{
-    "Method": "technique used",
-    "Process": "how applied",
-    "Data_Handling": "data used",
-    "Results_Format": "results format"
-  }},
-  "Aim_of_Study": "practical implications",
-  "Key_Findings": ["finding 1", "finding 2"],
-  "Key_Metrics": ["metric 1", "metric 2"],
-  "limitations_and_future_work": "limitations",
-  "Literature_Review_Paragraph": "3-5 sentence academic paragraph directly pasteable into literature review. Use Author(s) (year) citation format."
-}}
+            Return a JSON ARRAY with exactly {len(papers)} objects in order.
+            Each object:
+            {{
+            "Title": "paper title",
+            "Keywords": ["k1", "k2"],
+            "Research_Problem": "2-3 concrete sentences on the specific gap this paper addresses",
+            "Research_Objective": "the paper's stated goal, specific to this paper",
+            "Methodology_Approach": {{
+                "Method": "technique used",
+                "Process": "how applied",
+                "Data_Handling": "data used",
+                "Results_Format": "results format"
+            }},
+            "Aim_of_Study": "practical implications",
+            "Key_Findings": ["finding 1", "finding 2"],
+            "Key_Metrics": ["metric 1", "metric 2"],
+            "limitations_and_future_work": "limitations",
+            "Literature_Review_Paragraph": "4-5 sentence formal academic paragraph for direct insertion into a literature review. Format: 'LastName et al. (year) proposed [specific thing]. The methodology involved [specific method]. Results showed [specific finding]. This contributes to [field] by [contribution]. A limitation is [specific limitation].'"  
+            }}
 
-Return ONLY the JSON array. No other text."""
+            Return ONLY the JSON array. No other text."""
 
         raw = self._llm_call(prompt)
         if raw:
@@ -519,7 +621,6 @@ Return ONLY the JSON array. No other text."""
         return [_extractive_summary(p) for p in papers]
 
     # ── Reading order ─────────────────────────────────────────────────
-
     def generate_reading_order(self, clusters: Dict, query: str) -> str:
         """
         Generate a suggested reading order for a newcomer.
@@ -556,12 +657,12 @@ Return ONLY the JSON array. No other text."""
 
         prompt = f"""A student new to "{query}" needs a reading order.
 
-Available papers (one per research cluster):
-{papers_text}
+            Available papers (one per research cluster):
+            {papers_text}
 
-Suggest 5 papers to read in order, from foundational to cutting-edge.
-For each, give one sentence on why to read it at that point.
-Format as a numbered list. Be specific and practical."""
+            Suggest 5 papers to read in order, from foundational to cutting-edge.
+            For each, give one sentence on why to read it at that point.
+            Format as a numbered list. Be specific and practical."""
 
         # Use a text (non-JSON) call for this
         raw = self._llm_call_text(prompt)
@@ -599,7 +700,6 @@ Format as a numbered list. Be specific and practical."""
         return ""
 
     # ── Research gaps from actual content ────────────────────────────
-
     def generate_research_gaps(self, clusters: Dict, query: str) -> str:
         """
         Generate actual research gaps by comparing cluster themes.
@@ -620,21 +720,20 @@ Format as a numbered list. Be specific and practical."""
 
         prompt = f"""Research query: "{query}"
 
-These are the research clusters found in the literature:
-{summary_text}
+                These are the research clusters found in the literature:
+                {summary_text}
 
-Identify 3-4 specific, concrete research gaps by:
-1. Comparing what different clusters address vs what they leave open
-2. Noting where clusters don't overlap but probably should
-3. Identifying what the field has not yet studied
+                Identify 3-4 specific, concrete research gaps by:
+                1. Comparing what different clusters address vs what they leave open
+                2. Noting where clusters don't overlap but probably should
+                3. Identifying what the field has not yet studied
 
-Be specific — name the actual topics, not generic phrases like "limited datasets".
-Format as a numbered list with one sentence each."""
+                Be specific — name the actual topics, not generic phrases like "limited datasets".
+                Format as a numbered list with one sentence each."""
 
         return self._llm_call_text(prompt) or ""
 
     # ── PDF extraction ────────────────────────────────────────────────
-
     def _download_and_extract_pdf(self, pdf_url: str) -> Tuple[Optional[str], bool]:
         if not PYPDF2_AVAILABLE:
             return None, False
