@@ -149,8 +149,8 @@ def _fill_schema(parsed: Dict[str, Any]) -> Dict[str, Any]:
     out = {}
 
     # ── Scalar string fields ──────────────────────────────────────────
-    for k in ["Title", "Research_Problem", "Research_Objective",
-              "Aim_of_Study", "limitations_and_future_work", "Literature_Review_Paragraph"]:
+    for k in ["Title","Summary", "Literature_Review_Paragraph"
+              "Research_Problem", "Research_Objective", "Aim_of_Study", "limitations_and_future_work"]:
         val = parsed.get(k) 
         if isinstance(val, str) and val.strip() and val.strip().lower() not in (
                 'null', 'none', 'n/a', 'not specified', 'not specified in paper'):
@@ -158,6 +158,12 @@ def _fill_schema(parsed: Dict[str, Any]) -> Dict[str, Any]:
         else :
             out[k] = ""
     
+    # If old schema fields are empty but new Summary exists, populate them from it
+    # so display.py still has something to show in Problem Statement box
+    if out.get("Summary") and not out.get("Research_Problem"):
+        sentences = re.split(r'(?<=[.!?])\s+', out["Summary"])
+        out["Research_Problem"] = " ".join(sentences[:2]) if sentences else out["Summary"]
+
     # ── List fields — handle when LLM returns a string instead of array ──
     for k in ["Keywords", "Key_Findings", "Key_Metrics"]:
         val    = parsed.get(k) 
@@ -174,28 +180,17 @@ def _fill_schema(parsed: Dict[str, Any]) -> Dict[str, Any]:
                 out[k] = [val.strip()]
         else:
             out[k] = []
-
-    # ── Methodology — handle plain string collapse ────────────────────
-    mma = parsed.get("Methodology_Approach") 
-    if isinstance(mma, str) and mma.strip():
-        # LLM collapsed the whole dict into a string
-        out["Methodology_Approach"] = {
-            "Method": mma.strip(), "Process": "",
-            "Data_Handling": "", "Results_Format": ""
-        }
-    elif isinstance(mma, dict):
-        out["Methodology_Approach"] = {}
-        for sk in ["Method", "Process", "Data_Handling", "Results_Format"]:
-            sv = mma.get(sk)
-            out["Methodology_Approach"][sk] = (
-                sv.strip() if isinstance(sv, str) and sv.strip() else ""
-            )
-    else:
-        out["Methodology_Approach"] = {
-            "Method": "", "Process": "", "Data_Handling": "", "Results_Format": ""
-        }
+    
+    #  Methodology — keep empty but present for display compat
+    out["Methodology_Approach"] = parsed.get("Methodology_Approach") or {
+        "Method": "", "Process": "", "Data_Handling": "", "Results_Format": ""
+    }
+    if isinstance(out["Methodology_Approach"], str):
+        out["Methodology_Approach"] = {"Method": out["Methodology_Approach"],
+                                        "Process": "", "Data_Handling": "", "Results_Format": ""}
 
     return out
+
 
 # ─────────────────────────────────────────────────────────────────────
 # EXTRACTIVE FALLBACK
@@ -487,48 +482,40 @@ class FullPaperSummarizer:
         # For full text: prepend abstract explicitly so it's never truncated away
         if label == "Full Text" and abstract:
             prepared = (
-                f"ABSTRACT (read carefully):\n{abstract}\n\n"
-                f"FULL PAPER EXCERPT:\n"
+                f"ABSTRACT:\n{abstract}\n\nFULL TEXT EXCERPT:\n"
                 + _prepare_text_for_prompt(text, abstract)
             )
         else:
             prepared = _prepare_text_for_prompt(text, abstract)
 
-        return f"""You are an expert academic research analyst. Read the paper below carefully and extract SPECIFIC, CONCRETE information. Do NOT write generic or templated descriptions — every answer must be grounded in what this paper actually says.
-
-            PAPER METADATA:
+        return f"""You are an expert academic analyst. Read this paper and return a JSON object.
+            Be specific and concrete — ground every answer in what the paper actually says.
+        
             Title: {title}
             Authors: {authors}
             Year: {year}
-            User's research query: {query}
+            Research context: {query}
 
             PAPER CONTENT:
             ---
             {prepared}
             ---
 
-            Return ONLY a valid JSON object. No markdown fences. No explanation before or after. Every field is required — use "Not explicitly stated" only if genuinely absent, never leave a field blank or null.
+            Return ONLY a valid JSON object. No markdown. No text before or after the JSON object.
 
             {{
-                "Title": "{title}",
-                "Keywords": ["specific technical term from paper", "specific technical term", "specific technical term"],
-                "Research_Problem": "2-3 sentences on the SPECIFIC gap or challenge this paper addresses. What existing approach fails, and why? Be concrete — name the actual problem domain.",
-                "Research_Objective": "1-2 sentences: the paper's stated goal or research question, specific to THIS paper, not generic.",
-                "Methodology_Approach": {{
-                    "Method": "The EXACT technique, model, or algorithm (e.g. 'fine-tuned RoBERTa on biomedical NER', not just 'deep learning')",
-                    "Process": "2 sentences: step-by-step experimental workflow — what they did and in what order.",
-                    "Data_Handling": "Name the specific dataset(s), sample sizes if stated, train/test split, and preprocessing done.",
-                    "Results_Format": "How results are reported: e.g. 'F1 score on held-out test set vs 3 baselines in Table 2'"
-                }},
-                "Aim_of_Study": "2 sentences: what real-world problem in what domain does this solve? Give concrete use cases from the paper.",
+                "Keywords": ["specific term 1", "specific term 2", "specific term 3"],
+                
+                "Summary": "Write 4-5 sentences covering: (1) what specific problem this paper tackles, (2) the method or approach used, (3) what data or experiments were run, (4) the main result with any numbers, (5) why it matters. Be specific to THIS paper — no generic statements.",
+
                 "Key_Findings": [
-                    "Finding 1 with exact numbers if reported — e.g. 'Achieved 91.3% F1, outperforming BERT baseline by 5.2 points'",
-                    "Finding 2 — another concrete, specific result",
-                    "Finding 3 — a notable limitation or unexpected result, if present"
+                    "Most important finding — include exact numbers/percentages if reported",
+                    "Second finding — another concrete result or contribution",  
+                    "Third finding — a limitation or unexpected result if present"
                 ],
-                "Key_Metrics": ["MetricName: value", "DatasetName: N samples", "BaselineName: comparison value"],
-                "limitations_and_future_work": "2 sentences: what the authors explicitly acknowledge as limitations and what future work they suggest.",
-                "Literature_Review_Paragraph": "Write exactly 4-5 sentences in formal third-person academic style for direct insertion into a literature review. STRICT FORMAT — Sentence 1: '[LastName] et al. ({year}) proposed/investigated/developed [specific contribution].' Sentence 2: 'The [methodology] was applied to [specific data/domain].' Sentence 3: 'The study demonstrated [specific result with numbers if available].' Sentence 4: 'This work contributes to [field] by [specific contribution].' Sentence 5: 'However, [specific limitation stated by authors].'"
+
+                "Literature_Review_Paragraph": "Write 4-5 sentences in formal third-person academic style for direct insertion into a literature review. Sentence 1: '{authors.split(',')[0].split()[-1] if authors else 'The authors'} et al. ({year}) [proposed/investigated/demonstrated] [specific contribution].' Sentence 2: 'The [method] was applied to [data/domain].' Sentence 3: 'The study found [specific result with numbers if available].' Sentence 4: 'This contributes to [field] by [specific contribution].' Sentence 5: 'A key limitation noted is [specific limitation].'"
+
             }}"""
 
     def summarize_paper(self,paper: Dict[str, Any],use_full_text: bool = True,query: str = "") -> Dict[str, Any]:
@@ -606,18 +593,20 @@ class FullPaperSummarizer:
     def _call_and_parse(self, text, meta, query, label):
         raw    = self._llm_call(self._build_prompt(text, meta, query, label))
         if not raw:
+            logger.warning(f"[Summarizer] Empty LLM response for: {meta.get('title','')[:40]}")
             return None
         parsed = _parse_json(raw)
         if not parsed or not isinstance(parsed, dict):
+            logger.warning(f"[Summarizer] JSON parse failed for: {meta.get('title','')[:40]}")
+            logger.debug(f"[Summarizer] Raw response was: {raw[:200]}")
             return None
 
-        # Accept if ANY 2 meaningful fields are populated — not just Problem+Findings
-        _check_fields = ["Research_Problem", "Research_Objective", "Key_Findings",
-                         "Aim_of_Study", "Literature_Review_Paragraph",
-                         "Methodology_Approach"]
-        populated = sum(1 for k in _check_fields if parsed.get(k))
-        if populated < 2:
-            logger.warning(f"[Summarizer] LLM returned too few fields ({populated}) — rejecting")
+        # Accept if Summary OR (Problem + Findings) present
+        has_summary  = bool(parsed.get("Summary", "").strip())
+        has_problem  = bool(parsed.get("Research_Problem", "").strip())
+        has_findings = bool(parsed.get("Key_Findings"))
+        if not has_summary and not (has_problem or has_findings):
+            logger.warning(f"[Summarizer] All key fields empty for: {meta.get('title','')[:40]}")
             return None
         return _fill_schema(parsed)
         
