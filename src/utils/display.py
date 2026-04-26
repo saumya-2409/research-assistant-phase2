@@ -303,6 +303,7 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
 
     # Extract summary fields
     summary      = paper.get("ai_summary") or {}
+    summary_para = summary.get("Summary", "").strip() 
     problem      = summary.get("Research_Problem", "").strip()
     objective    = summary.get("Research_Objective", "").strip()
     implications = summary.get("Aim_of_Study", "").strip()
@@ -331,69 +332,72 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
 
     # ── Tab 1: Summary ────────────────────────────────────────────────
     with t1:
-        summary_para = summary.get("Summary", "").strip()
         has_llm = any([summary_para, problem, objective, method, findings, implications, limitations])
 
         if has_llm:
-            # Show the rich summary paragraph first if available (new schema)
+             # ── Full summary paragraph (new schema) ───────────────────
             if summary_para:
-                st.markdown("""<div style="background:#F8F7FF;border-left:3px solid #5B4EE8;
-                    border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:16px;
-                    line-height:1.7;color:#1A1744;font-size:14px;">""",
-                    unsafe_allow_html=True)
-                st.write(summary_para)
-                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"""<div style="background:#F8F7FF;border-left:3px solid #5B4EE8;
+                    border-radius:0 8px 8px 0;padding:14px 16px;
+                    margin-bottom:16px;line-height:1.7;color:#1A1744;font-size:14px;">
+                    <div style="font-size:10px;font-weight:700;color:#5B4EE8;
+                            text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+                    📄 Summary</div>
+                    {summary_para}
+                    </div>""",
+                    unsafe_allow_html=True
+                )
             
-            # Then findings
+            # ── Key Findings (full width, shown once) ─────────────────
             if findings:
-                with st.container(border=True):
-                    st.markdown("**💡 Key Findings**")
-                    for f in findings[:4]:
-                        st.markdown(f"- {f}")
+                st.markdown(
+                    """<div style="background:#FFFBF0;border:1px solid #F5C875;
+                        border-radius:10px;padding:14px 18px;margin-bottom:12px;">
+                        <div style="font-size:11px;font-weight:700;color:#633806;
+                            text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">
+                        💡 Key Findings</div>""",
+                    unsafe_allow_html=True
+                )
+                for f in findings[:4]:
+                    st.markdown(f"- {f}")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            # Row 1: Problem + Objective side by side
-            if problem or objective:
+            # ── Problem + Objective (only if no Summary paragraph) ────
+            if not summary_para and (problem or objective):
                 col_a, col_b = st.columns(2, gap="medium")
                 with col_a:
                     if problem:
-                        st.markdown("""<div style="background:#F0F4FF;border-left:3px solid #5B4EE8;
-                            border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:8px;">
-                            <div style="font-size:11px;font-weight:700;color:#5B4EE8;
-                                text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">
-                            🧐 Problem Statement</div>""", unsafe_allow_html=True)
-                        st.write(problem)
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"""<div style="background:#F0F4FF;border-left:3px solid #5B4EE8;
+                                border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:8px;">
+                                <div style="font-size:10px;font-weight:700;color:#5B4EE8;
+                                    text-transform:uppercase;margin-bottom:6px;">
+                                🧐 Problem</div>{problem}</div>""",
+                            unsafe_allow_html=True
+                        )
                 with col_b:
                     if objective:
-                        st.markdown("""<div style="background:#F0FFF8;border-left:3px solid #1D9E75;
-                            border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:8px;">
-                            <div style="font-size:11px;font-weight:700;color:#1D9E75;
-                                text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">
-                            🎯 Objective</div>""", unsafe_allow_html=True)
-                        st.write(objective)
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"""<div style="background:#F0FFF8;border-left:3px solid #1D9E75;
+                                border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:8px;">
+                                <div style="font-size:10px;font-weight:700;color:#1D9E75;
+                                    text-transform:uppercase;margin-bottom:6px;">
+                                🎯 Objective</div>{objective}</div>""",
+                            unsafe_allow_html=True
+                        )
 
-            # Row 2: Methodology + Key Findings side by side
-            has_method   = any([method, process, data_h, results_f])
-            has_findings = bool(findings)
-            if has_method or has_findings:
-                col_c, col_d = st.columns(2, gap="medium")
-                with col_c:
-                    if has_method:
-                        with st.container(border=True):
-                            st.markdown("**⚙️ Methodology**")
-                            if method:    st.markdown(f"**Method:** {method}")
-                            if process:   st.markdown(f"**Process:** {process}")
-                            if data_h:    st.markdown(f"**Data:** {data_h}")
-                            if results_f: st.markdown(f"**Results format:** {results_f}")
-                with col_d:
-                    if has_findings:
-                        with st.container(border=True):
-                            st.markdown("**💡 Key Findings**")
-                            for f in findings[:4]:
-                                st.markdown(f"- {f}")
+            # ── Methodology (only if fields populated) ─────────────────
+            has_method = any([method, process, data_h, results_f])
+            if has_method:
+                with st.container(border=True):
+                    st.markdown("**⚙️ Methodology**")
+                    if method:    st.markdown(f"**Method:** {method}")
+                    if process:   st.markdown(f"**Process:** {process}")
+                    if data_h:    st.markdown(f"**Data:** {data_h}")
+                    if results_f: st.markdown(f"**Results format:** {results_f}")
 
-            # Row 3: Implications + Limitations side by side
+            # ── Implications + Limitations ─────────────────────────────
             if implications or limitations:
                 col_e, col_f = st.columns(2, gap="medium")
                 with col_e:
@@ -404,21 +408,26 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
                 with col_f:
                     if limitations:
                         with st.container(border=True):
-                            st.markdown("**⚠️ Limitations & Future Work**")
+                            st.markdown("**⚠️ Limitations**")
                             st.write(limitations)
+
+
         else:
-            # No LLM summary — show abstract as fallback
+            # No LLM summary — show abstract clearly labelled
             if abstract:
-                st.markdown(f"""
-                <div style="background:#FAFAFA;border:1px solid #E8E6FF;border-radius:8px;
-                    padding:14px 16px;line-height:1.6;color:#374151;font-size:13px;">
-                    <div style="font-size:11px;font-weight:700;color:#9B97C4;
-                        text-transform:uppercase;margin-bottom:8px;">Abstract</div>
-                    {abstract[:600]}{'...' if len(abstract) > 600 else ''}
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f"""<div style="background:#FAFAFA;border:1px solid #E8E6FF;
+                        border-radius:8px;padding:14px 16px;line-height:1.6;
+                        color:#374151;font-size:13px;">
+                        <div style="font-size:10px;font-weight:700;color:#9B97C4;
+                            text-transform:uppercase;margin-bottom:8px;">Abstract</div>
+                        {abstract[:600]}{'...' if len(abstract) > 600 else ''}
+                        </div>""",
+                    unsafe_allow_html=True
+                )
+                st.caption("⚠️ LLM summary unavailable — check your API key and that `google-generativeai` is installed.")
             else:
-                st.caption("No summary available. Run with a configured LLM API key for AI summaries.")
+                st.caption("No summary or abstract available for this paper.")
 
         if keywords:
             st.caption(f"**Keywords:** {', '.join(str(k) for k in keywords[:12])}")
@@ -534,7 +543,6 @@ def _render_paper_body(paper: dict, idx: int = 0, show_start_here: bool = False)
             else:
                 st.toast("Already in your library.")
 
-
 # ─────────────────────────────────────────────────────────────────────
 # PAPER CARD — with expander (Papers tab)
 # ─────────────────────────────────────────────────────────────────────
@@ -557,7 +565,6 @@ def render_paper_ui(paper: dict, idx: int = 0, show_start_here: bool = False):
 
     with st.expander(expander_label, expanded=False):
         _render_paper_body(paper, idx=idx, show_start_here=show_start_here)
-
 
 # ─────────────────────────────────────────────────────────────────────
 # PAPER CARD — flat/inline (Cluster view in tab1)
