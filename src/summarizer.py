@@ -27,7 +27,7 @@ try:
 except ImportError:
     SUMMARISATION = {
         "provider": "gemini",
-        "gemini":   {"model": "gemma-3-12b-it", "max_tokens": 4000, "temperature": 0.1},
+        "gemini":   {"model": "gemini-1.5-flash", "max_tokens": 4000, "temperature": 0.1},
         "fallback": "extractive"
     }
 
@@ -270,7 +270,7 @@ class FullPaperSummarizer:
 
         self.provider   = SUMMARISATION.get("provider", "gemini")
         cfg             = SUMMARISATION.get(self.provider, {})
-        self.model      = cfg.get("model", "gemma-3-12b-it")
+        self.model      = cfg.get("model", "gemini-1.5-flash")
         self.max_tok    = cfg.get("max_tokens", 4000)
         self.temp       = cfg.get("temperature", 0.1)
         self.client     = None
