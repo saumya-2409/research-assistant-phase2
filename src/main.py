@@ -2,7 +2,14 @@
 AI Research Assistant — main Streamlit entry point.
 Handles UI layout, search orchestration, and results display.
 """
-
+import os, logging, warnings
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+warnings.filterwarnings("ignore", message=".*__path__.*")
+warnings.filterwarnings("ignore", message=".*Behavior may be different.*")
+for _l in ["transformers", "sentence_transformers", "huggingface_hub", "filelock"]:
+    logging.getLogger(_l).setLevel(logging.ERROR)
+  
 #Imports
 import streamlit as st
 import warnings
@@ -444,7 +451,7 @@ if st.session_state.papers_data:
         st.markdown("""
             <div style="background:#F8F7FF;border:1px solid #E0DEFF;border-radius:12px;
                         padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:2;">
-                <div style="font-weight:600;color:#1A1744;margin-bottom:8px;">📖 Legend</div>
+                <div style="font-weight:600;color:#1A1744;margin-bottom:8px;"></div>
                 <div style="display:flex;flex-wrap:wrap;gap:20px;">
                     <div>
                         <strong>Paper type</strong><br>
