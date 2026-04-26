@@ -325,12 +325,22 @@ class FullPaperSummarizer:
             elif self.provider == "together":
                 from together import Together
                 self.client = Together(api_key=api_key) if api_key else None
-
+              
             elif self.provider == "gemini":
-                import google.generativeai as genai
-                key = api_key or os.getenv("GEMINI_API_KEY", "")
-                genai.configure(api_key=key)
-                self.client = genai.GenerativeModel(self.model)
+                try:
+                    import google.generativeai as genai
+                    key = api_key or os.getenv("GEMINI_API_KEY", "")
+                    if not key:
+                        logger.error("[Summarizer] GEMINI_API_KEY not set — add it to .env or streamlit secrets")
+                        self.client = None
+                    else:
+                        genai.configure(api_key=key)
+                        self.client = genai.GenerativeModel(self.model)
+                        logger.info(f"[Summarizer] Gemini client ready: {self.model}")
+                except ImportError:
+                    logger.error("[Summarizer] google-generativeai not installed. Add 'google-generativeai>=0.5.0' to requirements.txt and restart.")
+                    self.client = None
+                  
 
             elif self.provider == "ollama":
                 self.client = "ollama"
