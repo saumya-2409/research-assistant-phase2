@@ -444,7 +444,6 @@ if st.session_state.papers_data:
         st.markdown("""
             <div style="background:#F8F7FF;border:1px solid #E0DEFF;border-radius:12px;
                         padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:2;">
-                <div style="font-weight:600;color:#1A1744;margin-bottom:8px;">📖 Legend</div>
                 <div style="display:flex;flex-wrap:wrap;gap:20px;">
                     <div>
                         <strong>Paper type</strong><br>
@@ -454,8 +453,7 @@ if st.session_state.papers_data:
                     </div>
                     <div>
                         <strong>Content available</strong><br>
-                        📄 <span style="background:#E1F5EE;color:#0F6E56;padding:2px 7px;border-radius:10px;font-size:11px;">full text</span> — summary from full paper PDF<br>
-                        ⚡ <span style="background:#FAEEDA;color:#633806;padding:2px 7px;border-radius:10px;font-size:11px;">abstract only</span> — summary from abstract<br>
+                        ⚡ <span style="background:#FAEEDA;color:#633806;padding:2px 7px;border-radius:10px;font-size:11px;">abstract only</span> — summary from full paper PDF<br>
                         🎯 <code>0.xx relevance</code> — semantic match score to your query (0–1)
                     </div>
                 </div>
