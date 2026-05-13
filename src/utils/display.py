@@ -237,11 +237,11 @@ def render_metrics(papers_data, full_text_papers, clusters):
         if papers_data else 0
     )
     
-    c1, c4, c5 = st.columns(5)
+    c1, c2, c3 = st.columns(3)
     for col, num, label in [
         (c1, len(papers_data),      "Papers Analysed"),
-        (c4, len(clusters),         "Clusters Found"),
-        (c5, avg_cites,             "Avg Citations"),
+        (c2, len(clusters),         "Clusters Found"),
+        (c3, avg_cites,             "Avg Citations"),
         
     ]:
         with col:
